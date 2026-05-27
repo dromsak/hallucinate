@@ -6,8 +6,8 @@ import {
   normalizeInto,
   smoothAngle,
 } from './math.ts'
-import { collideRoom, walkHeight } from './scene.ts'
-import type { CharacterMode, CircleBounds, Vec3 } from './types.ts'
+import { collideRoom, seatAt, walkHeight } from './scene.ts'
+import type { BottomMode, CharacterMode, CircleBounds, Vec3 } from './types.ts'
 
 export function createLocalCharacter(keys: Set<string>) {
   const position: Vec3 = [-2.2, -1.95, -6.8]
@@ -19,6 +19,9 @@ export function createLocalCharacter(keys: Set<string>) {
   let motionBlend = 0
   let mode: CharacterMode = 'stand'
   let velocityY = 0
+  let seated = false
+  let couchRelease = 0
+  let seat = ''
 
   return {
     position,
@@ -44,9 +47,35 @@ export function createLocalCharacter(keys: Set<string>) {
     readInput() {
       return readMoveInput(keys, input)
     },
-    update(delta: number, cameraTurn: number, outsideTree: CircleBounds) {
+    update(
+      delta: number,
+      cameraTurn: number,
+      outsideTree: CircleBounds,
+      bottomMode: BottomMode,
+      occupiedSeats: Set<string>,
+    ) {
       this.readInput()
       const moving = lengthSq(input) > 0
+      couchRelease = Math.max(0, couchRelease - delta)
+
+      if (seated) {
+        if (input[2] > 0) {
+          seated = false
+          couchRelease = 0.35
+          occupiedSeats.delete(seat)
+          seat = ''
+          mode = 'run'
+          motionBlend = 1
+          position[0] += Math.sin(turn) * 0.46
+          position[2] += Math.cos(turn) * 0.46
+        }
+        else {
+          motionBlend = 0
+          mode = bottomMode === 'pants' ? 'manSitting' : 'womanSitting'
+
+          return
+        }
+      }
 
       motionBlend = mix(motionBlend, moving ? 1 : 0, 1 - Math.exp(-8 * delta))
       mode = motionBlend > 0.5 ? 'run' : 'stand'
@@ -69,6 +98,23 @@ export function createLocalCharacter(keys: Set<string>) {
 
         position[0] += direction[0] * delta * 5
         position[2] += direction[2] * delta * 5
+        const nextSeat = couchRelease <= 0 ? seatAt(position, occupiedSeats) : undefined
+
+        if (nextSeat) {
+          seated = true
+          seat = nextSeat.id
+          occupiedSeats.add(seat)
+          position[0] = nextSeat.position[0]
+          position[1] = nextSeat.position[1]
+          position[2] = nextSeat.position[2]
+          turn = nextSeat.turn
+          motionBlend = 0
+          mode = bottomMode === 'pants' ? 'manSitting' : 'womanSitting'
+          velocityY = 0
+
+          return
+        }
+
         collideRoom(position, outsideTree)
         turn = smoothAngle(turn, Math.atan2(direction[0], direction[2]), 10, delta)
       }

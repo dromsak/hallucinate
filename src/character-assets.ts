@@ -15,9 +15,11 @@ export async function loadCharacterAssets(gl: WebGL2RenderingContext, hairIndex:
       return path.endsWith('.wasm') ? '/assimpjs.wasm' : path
     },
   })
-  const [stand, run, manHair, womanHair] = await Promise.all([
+  const [stand, run, manSitting, womanSitting, manHair, womanHair] = await Promise.all([
     loadAssimpScene(ajs, '/stand.fbx', 'stand.fbx'),
     loadAssimpScene(ajs, '/run.fbx', 'run.fbx'),
+    loadAssimpScene(ajs, '/man-sitting.fbx', 'man-sitting.fbx'),
+    loadAssimpScene(ajs, '/woman-sitting.fbx', 'woman-sitting.fbx'),
     loadAssimpScene(ajs, '/man-hair.fbx', 'man-hair.fbx'),
     loadAssimpScene(ajs, '/woman-hair.fbx', 'woman-hair.fbx'),
   ])
@@ -27,6 +29,8 @@ export async function loadCharacterAssets(gl: WebGL2RenderingContext, hairIndex:
     clips: {
       stand: createCharacterClip(stand, 'stand.fbx'),
       run: createCharacterClip(run, 'run.fbx'),
+      manSitting: createCharacterClip(manSitting, 'man-sitting.fbx'),
+      womanSitting: createCharacterClip(womanSitting, 'woman-sitting.fbx'),
     },
   }
   const hairMeshes = [...createHairMeshes(manHair, 'man'), ...createHairMeshes(womanHair, 'woman')]

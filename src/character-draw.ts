@@ -15,6 +15,7 @@ import { characterView, characterVisibility } from './character-visibility.ts'
 import { normalizeIndex } from './math.ts'
 import type {
   CharacterPart,
+  CharacterMode,
   CharacterRig,
   HairMesh,
   Player,
@@ -29,6 +30,7 @@ type CharacterInput = {
   position: Vec3
   turn: number
   motionBlend: number
+  mode?: CharacterMode
   style: PlayerStyle
   resolvedStyle?: ResolvedPlayerStyle
 }

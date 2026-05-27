@@ -4,6 +4,12 @@ import { backDoor, bartenderBar, bartenderStools, djBooth, djSpeakers, outsideBo
   outsideCouches, outsideHut, outsideHutBar, outsideHutBarStools, outsideHutDeckHeight, roomBounds } from './scene-data.ts'
 import type { Bounds, CircleBounds, Vec3 } from './types.ts'
 
+export type Seat = {
+  id: string
+  position: Vec3
+  turn: number
+}
+
 type PaddedBounds = {
   back: number
   front: number
@@ -14,6 +20,7 @@ type PaddedBounds = {
 const djBoothCollision = paddedBounds(djBooth)
 const bartenderBarCollision = paddedBounds(bartenderBar)
 const bartenderStoolCollisions = bartenderStools.map(bounds => paddedBounds(bounds))
+const seatStools = [...bartenderStools, ...outsideHutBarStools]
 const djSpeakerCollisions = djSpeakers.map(bounds => paddedBounds(bounds))
 const outsideDjBoothCollision = paddedBounds(outsideDjBooth)
 const outsideDjSpeakerCollisions = outsideDjSpeakers.map(bounds => paddedBounds(bounds))
@@ -100,6 +107,96 @@ export function collideRoom(position: Vec3, outsideTree: CircleBounds, outside =
   for (const speaker of djSpeakerCollisions) {
     collidePaddedBounds(position, speaker)
   }
+}
+
+export function seatAt(position: Vec3, occupiedSeats = new Set<string>(), padding = 0.46): Seat | undefined {
+  for (const couch of outsideCouches) {
+    const bounds = paddedBounds(couch, padding)
+
+    if (position[0] > bounds.left && position[0] < bounds.right && position[2] > bounds.back
+      && position[2] < bounds.front)
+    {
+      return nearestCouchSeat(couch, position, occupiedSeats)
+    }
+  }
+
+  for (let i = 0; i < seatStools.length; i++) {
+    const stool = seatStools[i]!
+    const bounds = paddedBounds(stool, padding)
+    const seat = stoolSeat(stool, i)
+
+    if (position[0] > bounds.left && position[0] < bounds.right && position[2] > bounds.back
+      && position[2] < bounds.front && !occupiedSeats.has(seat.id))
+    {
+      return seat
+    }
+  }
+}
+
+function nearestCouchSeat(couch: (typeof outsideCouches)[number], position: Vec3, occupiedSeats: Set<string>) {
+  const seats = couchSeats(couch).filter(seat => !occupiedSeats.has(seat.id))
+
+  seats.sort((a, b) => distanceSq(position, a.position) - distanceSq(position, b.position))
+
+  return seats[0]
+}
+
+function couchSeats(couch: (typeof outsideCouches)[number]): Seat[] {
+  const direction = couchSeatDirection(couch.face)
+  const side = couchSeatSide(couch.face)
+  const couchIndex = outsideCouches.indexOf(couch)
+  const depth = couch.face === 'north' || couch.face === 'south' ? couch.depth : couch.width
+  const width = couch.face === 'north' || couch.face === 'south' ? couch.width : couch.depth
+  const offsets = [-width * 0.3, 0, width * 0.3]
+
+  return offsets.map((offset, index) => ({
+    id: `${couchIndex}:${index}`,
+    position: [
+      couch.x + direction[0] * depth * 0.12 + side[0] * offset,
+      walkHeight(couch.x, characterFloor, couch.z) + 0.28,
+      couch.z + direction[2] * depth * 0.12 + side[2] * offset,
+    ] as Vec3,
+    turn: Math.atan2(direction[0], direction[2]),
+  }))
+}
+
+function stoolSeat(stool: Bounds, index: number): Seat {
+  const outside = index >= bartenderStools.length
+
+  return {
+    id: `stool:${index}`,
+    position: [stool.x, walkHeight(stool.x, characterFloor, stool.z) + 0.34, stool.z],
+    turn: outside ? Math.PI / 2 : Math.PI,
+  }
+}
+
+function couchSeatDirection(face: (typeof outsideCouches)[number]['face']): Vec3 {
+  if (face === 'north') {
+    return [0, 0, 1]
+  }
+  if (face === 'south') {
+    return [0, 0, -1]
+  }
+  if (face === 'east') {
+    return [1, 0, 0]
+  }
+
+  return [-1, 0, 0]
+}
+
+function couchSeatSide(face: (typeof outsideCouches)[number]['face']): Vec3 {
+  if (face === 'north' || face === 'south') {
+    return [1, 0, 0]
+  }
+
+  return [0, 0, 1]
+}
+
+function distanceSq(a: Vec3, b: Vec3) {
+  const x = a[0] - b[0]
+  const z = a[2] - b[2]
+
+  return x * x + z * z
 }
 
 export function collideBuildingWalls(position: Vec3, padding: number) {

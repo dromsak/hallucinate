@@ -80,7 +80,7 @@ export function createRigNodes(root: AssimpNode) {
 export function sampleCharacterPose(
   rig: CharacterRig,
   time: number,
-  player: { position: Vec3; turn: number; motionBlend: number },
+  player: { position: Vec3; turn: number; motionBlend: number; mode?: keyof CharacterRig['clips'] },
   characterPoseJoints: string[],
   characterPoseJointSet: Set<string>,
   characterGroundJointIndices: number[],
@@ -90,6 +90,16 @@ export function sampleCharacterPose(
   placedPose?: Vec3[],
   cacheFrame = 0,
 ) {
+  if (player.mode === 'manSitting' || player.mode === 'womanSitting') {
+    const pose = sampleClipPose(rig, rig.clips[player.mode], time, characterPoseJoints, characterPoseJointSet,
+      blendCache?.get(cacheFrame) ?? placedPose)
+
+    blendCache?.set(cacheFrame, pose)
+
+    return placeCharacterPose(pose, player.position, player.turn, characterPoseJoints, characterGroundJointIndices,
+      characterScale, placedPose)
+  }
+
   const motionBlendKey = blendCache ? Math.round(player.motionBlend * 60) : 0
   const blendKey = cacheFrame * 100 + motionBlendKey
   const blend = blendCache ? motionBlendKey / 60 : player.motionBlend

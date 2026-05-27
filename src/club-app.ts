@@ -82,6 +82,7 @@ let frameId = 0
 const saveKey = 'club-state'
 const bloomScale = 0.5
 const keys = new Set<string>()
+const occupiedSeats = new Set<string>()
 const localCharacter = createLocalCharacter(keys)
 const characterPosition = localCharacter.position
 const hairController = createCharacterHairController()
@@ -272,8 +273,8 @@ const draw = (stamp: number) => {
   pixelRatio.update(delta, stamp)
   clubGlobal.clubPixelRatio = pixelRatio.ratio()
   resize()
-  localCharacter.update(delta, cameraController.turn, outsideTree)
-  updatePlayers(players, delta, stamp * 0.001, outsideTree)
+  localCharacter.update(delta, cameraController.turn, outsideTree, styleController.bottomMode, occupiedSeats)
+  updatePlayers(players, delta, stamp * 0.001, outsideTree, occupiedSeats)
   cameraController.update(delta, localCharacter.input, localCharacter.turn)
   saveTimer.update(delta, () =>
     saveClubState({

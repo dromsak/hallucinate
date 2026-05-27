@@ -111,7 +111,7 @@ export type RigNode = {
   origin: Vec3
 }
 
-export type CharacterMode = 'stand' | 'run'
+export type CharacterMode = 'stand' | 'run' | 'manSitting' | 'womanSitting'
 export type BottomMode = 'pants' | 'skirt'
 export type TopMode = 'shirt' | 'sleeveless' | 'skin' | 'chest'
 export type CharacterPart = {
@@ -159,9 +159,12 @@ export type Player = {
   position: Vec3
   turn: number
   motionBlend: number
+  mode?: CharacterMode
   input: Vec3
   nextDecision: number
   destination: PlayerDestination
+  seat?: string
+  sittingUntil?: number
   style: PlayerStyle
   resolvedStyle: ResolvedPlayerStyle
   seed: number
