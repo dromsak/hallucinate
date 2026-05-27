@@ -3,12 +3,8 @@ import { resolvePlayerStyle } from './character-style.ts'
 import { lengthSq, mix, normalizeIndex, smoothAngle } from './math.ts'
 import {
   backDoor,
-  bartenderBar,
-  bartenderStools,
   djBooth,
-  outsideCouches,
   outsideDjBooth,
-  outsideHutBarStools,
   roomBounds,
 } from './scene-data.ts'
 import { collideRoom, isOutside, seatAt, walkHeight } from './scene.ts'
@@ -32,7 +28,7 @@ export function createPlayers(count: number, outsideTree: CircleBounds) {
 
   for (let i = 0; i < count; i++) {
     const seed = i + 1
-    const destination = playerDestination(seed, 0, outsideTree)
+    const destination = playerDestination(seed, 0)
     const position: Vec3 = [
       destination.position[0] + seededRange(seed, 10, -1.2, 1.2),
       characterFloor,
@@ -88,7 +84,7 @@ export function updatePlayers(
       player.motionBlend = 1
       player.position[0] += Math.sin(player.turn) * 0.46
       player.position[2] += Math.cos(player.turn) * 0.46
-      player.destination = playerDestination(player.seed, Math.floor(time / 6 + player.seed), outsideTree)
+      player.destination = playerDestination(player.seed, Math.floor(time / 6 + player.seed))
       player.nextDecision = time
     }
 
@@ -103,8 +99,10 @@ export function updatePlayers(
         continue
       }
 
-      player.destination = playerDestination(player.seed, Math.floor(time / 6 + player.seed), outsideTree)
-      player.nextDecision = time
+      if (!lingerPlayer(player, time)) {
+        player.destination = playerDestination(player.seed, Math.floor(time / 6 + player.seed))
+        player.nextDecision = time
+      }
     }
 
     if (time >= player.nextDecision) {
@@ -164,6 +162,30 @@ function trySitPlayer(player: Player, time: number, occupiedSeats: Set<string>) 
   return true
 }
 
+function lingerPlayer(player: Player, time: number) {
+  if (!player.destination.linger) {
+    return false
+  }
+
+  if (!player.lingeringUntil) {
+    player.lingeringUntil = time + seededRange(player.seed, Math.floor(time * 2.9), player.destination.linger[0],
+      player.destination.linger[1])
+  }
+
+  player.input[0] = 0
+  player.input[1] = 0
+  player.input[2] = 0
+  player.nextDecision = player.lingeringUntil
+
+  if (time < player.lingeringUntil) {
+    return true
+  }
+
+  player.lingeringUntil = undefined
+
+  return false
+}
+
 function choosePlayerInput(player: Player, time: number) {
   const random = seededRandom(player.seed, Math.floor(time * 7.7))
 
@@ -201,59 +223,28 @@ function activePlayerDestination(
   return crossingDestination
 }
 
-function playerDestination(seed: number, step: number, outsideTree: CircleBounds): PlayerDestination {
-  const choice = Math.floor(seededRange(seed, step + 100, 0, 10))
-  const jitterX = seededRange(seed, step + 101, -1.8, 1.8)
-  const jitterZ = seededRange(seed, step + 102, -1.4, 1.4)
+function playerDestination(seed: number, step: number): PlayerDestination {
+  const inside = seededRandom(seed, step + 100) < 0.35
+  const jitterX = seededRange(seed, step + 101, -4.2, 4.2)
+  const jitterZ = seededRange(seed, step + 102, -3.2, 3.2)
 
-  if (choice === 0) {
-    return { outside: false, position: [jitterX, characterFloor, djBooth.z + 2.2 + jitterZ],
-      lookAt: [djBooth.x, characterFloor, djBooth.z] }
-  }
+  return inside
+    ? danceFloorDestination(djBooth, false, 1, jitterX, jitterZ)
+    : danceFloorDestination(outsideDjBooth, true, -1, jitterX, jitterZ)
+}
 
-  if (choice === 1) {
-    return { outside: false, position: [bartenderBar.x + jitterX, characterFloor, bartenderBar.z - 1.55 + jitterZ * 0.35] }
-  }
-
-  if (choice === 2) {
-    return { outside: false, position: [backDoor.x + jitterX * 0.35, characterFloor, roomBounds.front - 1.3 + jitterZ * 0.3] }
-  }
-
-  if (choice === 3) {
-    return { outside: true, position: [outsideTree.x + jitterX, characterFloor, outsideTree.z - 2.4 + jitterZ],
-      lookAt: [outsideTree.x, characterFloor, outsideTree.z] }
-  }
-
-  if (choice === 4) {
-    return { outside: true, position: [outsideDjBooth.x + jitterX, characterFloor, outsideDjBooth.z - 2.6 + jitterZ],
-      lookAt: [outsideDjBooth.x, characterFloor, outsideDjBooth.z] }
-  }
-
-  if (choice === 5 || choice === 6) {
-    const couch = outsideCouches[normalizeIndex(Math.floor(seededRange(seed, step + 105, 0, outsideCouches.length)),
-      outsideCouches.length)]!
-
-    return { outside: true, position: [couch.x + jitterX * 0.25, characterFloor, couch.z + jitterZ * 0.25] }
-  }
-
-  if (choice === 7) {
-    const stool = bartenderStools[normalizeIndex(Math.floor(seededRange(seed, step + 106, 0, bartenderStools.length)),
-      bartenderStools.length)]!
-
-    return { outside: false, position: [stool.x + jitterX * 0.12, characterFloor, stool.z + jitterZ * 0.12] }
-  }
-
-  if (choice === 8) {
-    const stool = outsideHutBarStools[normalizeIndex(Math.floor(seededRange(seed, step + 107, 0,
-      outsideHutBarStools.length)), outsideHutBarStools.length)]!
-
-    return { outside: true, position: [stool.x + jitterX * 0.12, characterFloor, stool.z + jitterZ * 0.12] }
-  }
-
+function danceFloorDestination(
+  bounds: typeof djBooth,
+  outside: boolean,
+  forward: number,
+  jitterX: number,
+  jitterZ: number,
+): PlayerDestination {
   return {
-    outside: false,
-    position: [seededRange(seed, step + 103, roomBounds.left + 1.2, roomBounds.right - 1.2), characterFloor,
-      seededRange(seed, step + 104, roomBounds.back + 2.2, roomBounds.front - 2.0)],
+    outside,
+    position: [bounds.x + jitterX, characterFloor, bounds.z + forward * (bounds.depth * 0.5 + 2.8 + jitterZ)],
+    lookAt: [bounds.x, characterFloor, bounds.z],
+    linger: [18, 42],
   }
 }
 

@@ -14,6 +14,7 @@ export function createCameraController(canvas: HTMLCanvasElement, characterPosit
   let dragY = 0
   let pitch = 0
   let dragging = false
+  let holdingManualCamera = false
   let returning = false
   let wasMoving = false
 
@@ -30,6 +31,7 @@ export function createCameraController(canvas: HTMLCanvasElement, characterPosit
     if (dragging) {
       turn -= (event.clientX - dragX) * 0.005
       pitch = clamp(pitch + (event.clientY - dragY) * 0.018, -2.4, 4.2)
+      holdingManualCamera = true
       dragX = event.clientX
       dragY = event.clientY
     }
@@ -37,13 +39,11 @@ export function createCameraController(canvas: HTMLCanvasElement, characterPosit
 
   canvas.addEventListener('pointerup', event => {
     dragging = false
-    returning = true
     canvas.releasePointerCapture(event.pointerId)
   })
 
   canvas.addEventListener('pointercancel', event => {
     dragging = false
-    returning = true
     canvas.releasePointerCapture(event.pointerId)
   })
 
@@ -65,6 +65,11 @@ export function createCameraController(canvas: HTMLCanvasElement, characterPosit
     update(delta: number, input: Vec3, characterTurn: number) {
       const moving = lengthSq(input) > 0
       const movingBack = moving && input[2] < 0
+
+      if (holdingManualCamera && moving) {
+        holdingManualCamera = false
+        returning = true
+      }
 
       if (!dragging && wasMoving && !moving) {
         returning = true
@@ -94,6 +99,12 @@ export function createCameraController(canvas: HTMLCanvasElement, characterPosit
       target[0] = characterPosition[0]
       target[1] = characterPosition[1] + 1.2
       target[2] = characterPosition[2]
+
+      if (holdingManualCamera && !dragging) {
+        wasMoving = moving
+        return
+      }
+
       const outside = isOutside(characterPosition)
       const cameraOutside = isOutside(position)
       const crossingOutside = outside && !cameraOutside

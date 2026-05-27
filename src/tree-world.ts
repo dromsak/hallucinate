@@ -1,4 +1,3 @@
-import assimpjs from 'assimpjs'
 import { loadAssimpScene } from './assimp-loader.ts'
 import { characterFloor } from './character-data.ts'
 import { triangleAreaSquared } from './character-geometry.ts'
@@ -15,12 +14,7 @@ export async function loadOutsideTree(
   outsideTree: CircleBounds,
   addSunLitTriangle: (target: Vertex[], a: Vec3, b: Vec3, c: Vec3, color: Vec3, tree: CircleBounds) => void,
 ) {
-  const ajs = await assimpjs({
-    locateFile(path) {
-      return path.endsWith('.wasm') ? '/assimpjs.wasm' : path
-    },
-  })
-  const trees = await loadAssimpScene(ajs, '/trees.fbx', 'trees.fbx')
+  const trees = await loadAssimpScene('/trees.fbx', 'trees.fbx')
   const meshes = createTreeMeshes(trees)
   const position: Vec3 = [outsideTree.x, characterFloor + 3.7, outsideTree.z]
   const collision = treeCollision(meshes, position)

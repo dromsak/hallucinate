@@ -442,15 +442,15 @@ const characterRenderSystem = createCharacterRenderSystem({
 frameId = requestAnimationFrame(draw)
 clubGlobal.clubFrameId = frameId
 
-characterRenderSystem.loadOnce(() => {
-  loadOutsideTree(gl, treeShadowMap, vertices, outsideTree, addSunLitTriangle)
-    .then(nextTree => {
-      outsideTree = nextTree
-      refreshRoomBuffer()
-    })
-    .catch((error: unknown) => {
-      console.error(error)
-    })
-}).catch((error: unknown) => {
+characterRenderSystem.loadOnce().catch((error: unknown) => {
   console.error(error)
 })
+
+loadOutsideTree(gl, treeShadowMap, vertices, outsideTree, addSunLitTriangle)
+  .then(nextTree => {
+    outsideTree = nextTree
+    refreshRoomBuffer()
+  })
+  .catch((error: unknown) => {
+    console.error(error)
+  })

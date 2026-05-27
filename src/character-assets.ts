@@ -1,5 +1,4 @@
-import assimpjs from 'assimpjs'
-import { loadAssimpScene } from './assimp-loader.ts'
+import { loadAssimpScenes } from './assimp-loader.ts'
 import { characterBones } from './character-data.ts'
 import { createHairMeshes, createHairRenderMeshes } from './character-hair.ts'
 import {
@@ -12,32 +11,26 @@ import { normalizeIndex } from './math.ts'
 export const idleClipNames = ['stand.fbx', ...Array.from({ length: 19 }, (_, i) => `dance${i + 1}.fbx`)]
 
 export async function loadCharacterAssets(gl: WebGL2RenderingContext, hairIndex: number) {
-  const ajs = await assimpjs({
-    locateFile(path) {
-      return path.endsWith('.wasm') ? '/assimpjs.wasm' : path
-    },
-  })
-  const [stand, run, manSitting, womanSitting, manHair, womanHair, ...dances] = await Promise.all([
-    loadAssimpScene(ajs, '/stand.fbx', 'stand.fbx'),
-    loadAssimpScene(ajs, '/run.fbx', 'run.fbx'),
-    loadAssimpScene(ajs, '/man-sitting.fbx', 'man-sitting.fbx'),
-    loadAssimpScene(ajs, '/woman-sitting.fbx', 'woman-sitting.fbx'),
-    loadAssimpScene(ajs, '/man-hair.fbx', 'man-hair.fbx'),
-    loadAssimpScene(ajs, '/woman-hair.fbx', 'woman-hair.fbx'),
-    ...idleClipNames.slice(1).map(name => loadAssimpScene(ajs, `/${name}`, name)),
+  const [stand, run, manSitting, womanSitting, manHair, womanHair] = await loadAssimpScenes([
+    { path: '/stand.fbx', name: 'stand.fbx' },
+    { path: '/run.fbx', name: 'run.fbx' },
+    { path: '/man-sitting.fbx', name: 'man-sitting.fbx' },
+    { path: '/woman-sitting.fbx', name: 'woman-sitting.fbx' },
+    { path: '/man-hair.fbx', name: 'man-hair.fbx' },
+    { path: '/woman-hair.fbx', name: 'woman-hair.fbx' },
   ])
   const rig = {
-    root: stand.rootnode,
-    nodes: createRigNodes(stand.rootnode),
+    root: stand!.rootnode,
+    nodes: createRigNodes(stand!.rootnode),
     clips: {
-      stand: createCharacterClip(stand, 'stand.fbx'),
-      run: createCharacterClip(run, 'run.fbx'),
-      manSitting: createCharacterClip(manSitting, 'man-sitting.fbx'),
-      womanSitting: createCharacterClip(womanSitting, 'woman-sitting.fbx'),
-      dances: dances.map((dance, index) => createCharacterClip(dance, idleClipNames[index + 1]!)),
+      stand: createCharacterClip(stand!, 'stand.fbx'),
+      run: createCharacterClip(run!, 'run.fbx'),
+      manSitting: createCharacterClip(manSitting!, 'man-sitting.fbx'),
+      womanSitting: createCharacterClip(womanSitting!, 'woman-sitting.fbx'),
+      dances: [],
     },
   }
-  const hairMeshes = [...createHairMeshes(manHair, 'man'), ...createHairMeshes(womanHair, 'woman')]
+  const hairMeshes = [...createHairMeshes(manHair!, 'man'), ...createHairMeshes(womanHair!, 'woman')]
 
   for (let i = 0; i < hairMeshes.length; i++) {
     hairMeshes[i]!.index = i
@@ -51,4 +44,10 @@ export async function loadCharacterAssets(gl: WebGL2RenderingContext, hairIndex:
     hairRenderMeshes: createHairRenderMeshes(gl, hairMeshes),
     hairIndex: normalizeIndex(hairIndex, hairMeshes.length + 1),
   }
+}
+
+export async function loadCharacterDances(rig: Awaited<ReturnType<typeof loadCharacterAssets>>['rig']) {
+  const dances = await loadAssimpScenes(idleClipNames.slice(1).map(name => ({ path: `/${name}`, name })))
+
+  rig.clips.dances = dances.map((dance, index) => createCharacterClip(dance, idleClipNames[index + 1]!))
 }

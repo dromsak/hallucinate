@@ -23,7 +23,7 @@ export function idleClip(rig: CharacterRig, index: number) {
     return rig.clips.stand
   }
 
-  return rig.clips.dances[index - 1]!
+  return rig.clips.dances[index - 1] ?? rig.clips.stand
 }
 
 export function createCharacterClip(scene: AssimpScene, name: string): CharacterClip {

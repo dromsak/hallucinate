@@ -155,6 +155,7 @@ export type PlayerDestination = {
   outside: boolean
   position: Vec3
   lookAt?: Vec3
+  linger?: [number, number]
 }
 
 export type Player = {
@@ -168,6 +169,7 @@ export type Player = {
   destination: PlayerDestination
   seat?: string
   sittingUntil?: number
+  lingeringUntil?: number
   style: PlayerStyle
   resolvedStyle: ResolvedPlayerStyle
   seed: number

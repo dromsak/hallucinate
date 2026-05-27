@@ -1,4 +1,4 @@
-import { loadCharacterAssets } from './character-assets.ts'
+import { loadCharacterAssets, loadCharacterDances } from './character-assets.ts'
 import { buildCharacterDrawData } from './character-draw.ts'
 import type { CharacterDrawCache } from './character-draw.ts'
 import { uploadFloatBuffer } from './character-gpu.ts'
@@ -58,6 +58,9 @@ export function createCharacterRenderSystem(options: {
     options.hairController.setMeshes(assets.hairMeshes, assets.hairIndex)
     assetsLoaded = true
     options.hairController.log()
+    loadCharacterDances(assets.rig).catch((error: unknown) => {
+      console.error(error)
+    })
 
     return assets.rig
   }
