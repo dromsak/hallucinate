@@ -1,5 +1,4 @@
-import { addQuad } from './geometry.ts'
-import type { Vec3, Vertex } from './types.ts'
+import type { Vec3 } from './types.ts'
 
 export type VertexBufferCache = {
   data: Float32Array
@@ -8,24 +7,11 @@ export type VertexBufferCache = {
 const lightPoint: Vec3 = [0, 0, 0]
 const lightNormal: Vec3 = [0, 1, 0]
 
-export function flattenVertices(target: Vertex[], cache?: VertexBufferCache) {
-  const size = target.length * 11
+export function flattenVertices(target: number[], cache?: VertexBufferCache) {
+  const size = target.length
   const data = cache ? resizeVertexBuffer(cache, size) : new Float32Array(size)
-  let offset = 0
 
-  for (const vertex of target) {
-    data[offset++] = vertex[0]
-    data[offset++] = vertex[1]
-    data[offset++] = vertex[2]
-    data[offset++] = vertex[3]
-    data[offset++] = vertex[4]
-    data[offset++] = vertex[5]
-    data[offset++] = vertex[6]
-    data[offset++] = vertex[7]
-    data[offset++] = vertex[8]
-    data[offset++] = vertex[9]
-    data[offset++] = vertex[10]
-  }
+  data.set(target)
 
   return data.length === size ? data : data.subarray(0, size)
 }
@@ -53,7 +39,7 @@ export function triangleAreaSquared(a: Vec3, b: Vec3, c: Vec3) {
 }
 
 export function addCharacterBox(
-  target: Vertex[],
+  target: number[],
   instances: number[],
   a: Vec3,
   b: Vec3,
@@ -137,7 +123,7 @@ export function addCharacterBox(
 }
 
 export function addCharacterQuad(
-  target: Vertex[],
+  target: number[],
   a: Vec3,
   b: Vec3,
   c: Vec3,
@@ -151,12 +137,12 @@ export function addCharacterQuad(
     addLitQuad(target, a, b, c, d, color, glow, light)
   }
   else {
-    addQuad(target, a, b, c, d, color, glow)
+    addFlatQuad(target, a, b, c, d, color, glow)
   }
 }
 
 function addLitQuad(
-  target: Vertex[],
+  target: number[],
   a: Vec3,
   b: Vec3,
   c: Vec3,
@@ -186,7 +172,53 @@ function addLitQuad(
   lightNormal[1] = ny / length
   lightNormal[2] = nz / length
 
-  addQuad(target, a, b, c, d, light(color, lightPoint, lightNormal), glow)
+  addFlatQuad(target, a, b, c, d, light(color, lightPoint, lightNormal), glow)
+}
+
+export function addFlatTriangle(
+  target: number[],
+  ax: number,
+  ay: number,
+  az: number,
+  bx: number,
+  by: number,
+  bz: number,
+  cx: number,
+  cy: number,
+  cz: number,
+  color: Vec3,
+  glow: number,
+  strobe = 0,
+) {
+  addFlatVertex(target, ax, ay, az, color, glow, strobe)
+  addFlatVertex(target, bx, by, bz, color, glow, strobe)
+  addFlatVertex(target, cx, cy, cz, color, glow, strobe)
+}
+
+function addFlatQuad(
+  target: number[],
+  a: Vec3,
+  b: Vec3,
+  c: Vec3,
+  d: Vec3,
+  color: Vec3,
+  glow: number,
+  strobe = 0,
+) {
+  addFlatTriangle(target, a[0], a[1], a[2], b[0], b[1], b[2], c[0], c[1], c[2], color, glow, strobe)
+  addFlatTriangle(target, a[0], a[1], a[2], c[0], c[1], c[2], d[0], d[1], d[2], color, glow, strobe)
+}
+
+function addFlatVertex(
+  target: number[],
+  x: number,
+  y: number,
+  z: number,
+  color: Vec3,
+  glow: number,
+  strobe: number,
+) {
+  target.push(x, y, z, color[0], color[1], color[2], glow, strobe, 0, 0, 0)
 }
 
 function addCharacterBoxInstance(

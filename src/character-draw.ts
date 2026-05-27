@@ -2,6 +2,7 @@ import { characterGroundJoints, characterScale, shoe, skin } from './character-d
 import {
   addCharacterBox,
   addCharacterQuad,
+  addFlatTriangle,
   flattenVertices,
 } from './character-geometry.ts'
 import type { VertexBufferCache } from './character-geometry.ts'
@@ -20,7 +21,6 @@ import type {
   ResolvedPlayerStyle,
   SampledPose,
   Vec3,
-  Vertex,
 } from './types.ts'
 
 type CharacterInput = {
@@ -59,7 +59,7 @@ export type CharacterDrawCache = {
   poses: Vec3[][]
   usedBasePoseKeys: Set<number>
   usedNpcBlendKeys: Set<number>
-  vertices: Vertex[]
+  vertices: number[]
 }
 
 const poseJointIndices = new Map(characterPoseJoints.map((name, index) => [name, index]))
@@ -141,7 +141,7 @@ export function buildCharacterDrawData(options: BuildOptions) {
 }
 
 function addRenderedCharacter(
-  target: Vertex[],
+  target: number[],
   boxInstances: number[],
   hairInstances: number[],
   player: CharacterInput,
@@ -248,7 +248,7 @@ function addNpcHairInstance(
 }
 
 function addCharacterPart(
-  target: Vertex[],
+  target: number[],
   boxInstances: number[],
   pose: Vec3[],
   plan: { part: CharacterPart; fromIndex: number; toIndex: number },
@@ -313,7 +313,7 @@ function characterPartColor(part: CharacterPart, style: ResolvedPlayerStyle) {
 }
 
 function addCharacterChest(
-  target: Vertex[],
+  target: number[],
   boxInstances: number[],
   pose: Vec3[],
   player: { turn: number },
@@ -338,7 +338,7 @@ function addCharacterChest(
 }
 
 function addCharacterChestSide(
-  target: Vertex[],
+  target: number[],
   boxInstances: number[],
   centerX: number,
   centerY: number,
@@ -369,7 +369,7 @@ function addCharacterChestSide(
 }
 
 function addCharacterSkirt(
-  target: Vertex[],
+  target: number[],
   pose: Vec3[],
   player: { turn: number },
   turn: TurnBasis,
@@ -429,7 +429,7 @@ function addCharacterSkirt(
 }
 
 function addCharacterHair(
-  target: Vertex[],
+  target: number[],
   pose: Vec3[],
   mesh: HairMesh,
   turn: TurnBasis,
@@ -497,11 +497,7 @@ function addCharacterHair(
 
       const shade = light(color, hairLightPoint, hairLightNormal)
 
-      target.push(
-        [ax, ay, az, shade[0], shade[1], shade[2], 0, 0, 0, 0, 0],
-        [bx, by, bz, shade[0], shade[1], shade[2], 0, 0, 0, 0, 0],
-        [cx, cy, cz, shade[0], shade[1], shade[2], 0, 0, 0, 0, 0],
-      )
+      addFlatTriangle(target, ax, ay, az, bx, by, bz, cx, cy, cz, shade, 0)
     }
   }
 }
