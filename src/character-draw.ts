@@ -52,6 +52,7 @@ type TurnBasis = {
 }
 
 export type CharacterDrawCache = {
+  basePoses: Map<number, SampledPose>
   boxInstances: number[]
   hairInstances: number[]
   npcBlendCache: PoseBlendCache
@@ -85,6 +86,7 @@ export function buildCharacterDrawData(options: BuildOptions) {
   const hairInstances = cache?.hairInstances ?? []
   const npcBlendCache = cache?.npcBlendCache ?? new Map()
   const poses = cache?.poses ?? []
+  const basePoses = cache?.basePoses ?? new Map()
   const basePose = sampleBasePose(options.rig, options.time, characterPoseJoints, characterPoseJointSet)
   let poseIndex = 0
 
@@ -92,6 +94,7 @@ export function buildCharacterDrawData(options: BuildOptions) {
   boxInstances.length = 0
   hairInstances.length = 0
   npcBlendCache.clear()
+  basePoses.clear()
 
   addRenderedCharacter(vertices, boxInstances, hairInstances, options.character, options, true, basePose, undefined,
     poses[poseIndex] ??= [])
@@ -101,8 +104,13 @@ export function buildCharacterDrawData(options: BuildOptions) {
 
   for (const player of options.players) {
     if (characterInView(player, view, options.width, options.height)) {
-      addRenderedCharacter(vertices, boxInstances, hairInstances, player, options, false, basePose, npcBlendCache,
-        poses[poseIndex] ??= [])
+      const sampledTime = bodySampleTime(options.time, options.cameraPosition, player.position)
+      const sampleKey = Math.round(sampledTime * 60)
+      const sampledBasePose = basePoses.get(sampleKey) ?? sampleAndCacheBasePose(options.rig, sampledTime, basePoses,
+        sampleKey)
+
+      addRenderedCharacter(vertices, boxInstances, hairInstances, player, options, false, sampledBasePose,
+        npcBlendCache, poses[poseIndex] ??= [], sampledTime)
       poseIndex++
     }
   }
@@ -124,8 +132,9 @@ function addRenderedCharacter(
   basePose?: SampledPose,
   blendCache?: PoseBlendCache,
   placedPose?: Vec3[],
+  time = options.time,
 ) {
-  const pose = sampleCharacterPose(options.rig, options.time, player, characterPoseJoints, characterPoseJointSet,
+  const pose = sampleCharacterPose(options.rig, time, player, characterPoseJoints, characterPoseJointSet,
     groundJointIndices, characterScale, basePose, blendCache, placedPose)
   const style = player.resolvedStyle ?? resolvePlayerStyle(player.style)
   const localReflection = detailedHair
@@ -156,6 +165,28 @@ function addRenderedCharacter(
   else if (hair && options.hairMeshes.length > 0) {
     addNpcHairInstance(hairInstances, pose, hair, player, style.hairColor)
   }
+}
+
+function bodySampleTime(time: number, cameraPosition: Vec3, playerPosition: Vec3) {
+  const dx = playerPosition[0] - cameraPosition[0]
+  const dz = playerPosition[2] - cameraPosition[2]
+  const distanceSq = dx * dx + dz * dz
+  const fps = distanceSq > 32 * 32 ? 8 : distanceSq > 20 * 20 ? 15 : distanceSq > 10 * 10 ? 30 : 60
+
+  return Math.round(time * fps) / fps
+}
+
+function sampleAndCacheBasePose(
+  rig: CharacterRig,
+  time: number,
+  basePoses: Map<number, SampledPose>,
+  key: number,
+) {
+  const pose = sampleBasePose(rig, time, characterPoseJoints, characterPoseJointSet)
+
+  basePoses.set(key, pose)
+
+  return pose
 }
 
 function addNpcHairInstance(

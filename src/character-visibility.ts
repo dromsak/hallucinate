@@ -1,12 +1,30 @@
-import { cross, dot, normalize, subtract } from './math.ts'
 import type { Player, Vec3 } from './types.ts'
 
-export function characterView(eye: Vec3, target: Vec3) {
-  const forward = normalize(subtract(target, eye))
-  const right = normalize(cross(forward, [0, 1, 0]))
-  const up = cross(right, forward)
+const fovScale = Math.tan(1.08 / 2)
 
-  return { eye, forward, right, up }
+export function characterView(eye: Vec3, target: Vec3) {
+  const forwardX = target[0] - eye[0]
+  const forwardY = target[1] - eye[1]
+  const forwardZ = target[2] - eye[2]
+  const forwardLength = Math.hypot(forwardX, forwardY, forwardZ)
+  const fx = forwardX / forwardLength
+  const fy = forwardY / forwardLength
+  const fz = forwardZ / forwardLength
+  const rightLength = Math.hypot(-fz, fx)
+  const rx = -fz / rightLength
+  const rz = fx / rightLength
+
+  return {
+    eye,
+    fx,
+    fy,
+    fz,
+    rx,
+    rz,
+    ux: -rz * fy,
+    uy: rz * fx - rx * fz,
+    uz: rx * fy,
+  }
 }
 
 export function characterInView(
@@ -15,17 +33,19 @@ export function characterInView(
   width: number,
   height: number,
 ) {
-  const center: Vec3 = [player.position[0], player.position[1] + 0.85, player.position[2]]
-  const toPlayer = subtract(center, view.eye)
-  const depth = dot(toPlayer, view.forward)
+  const toPlayerX = player.position[0] - view.eye[0]
+  const toPlayerY = player.position[1] + 0.85 - view.eye[1]
+  const toPlayerZ = player.position[2] - view.eye[2]
+  const depth = toPlayerX * view.fx + toPlayerY * view.fy + toPlayerZ * view.fz
   const radius = 1.2
 
   if (depth < -radius || depth > 45) {
     return false
   }
 
-  const vertical = Math.tan(1.08 / 2) * Math.max(depth, 0.1) + radius
+  const vertical = fovScale * Math.max(depth, 0.1) + radius
   const horizontal = vertical * (width / height) + radius
 
-  return Math.abs(dot(toPlayer, view.right)) < horizontal && Math.abs(dot(toPlayer, view.up)) < vertical
+  return Math.abs(toPlayerX * view.rx + toPlayerZ * view.rz) < horizontal
+    && Math.abs(toPlayerX * view.ux + toPlayerY * view.uy + toPlayerZ * view.uz) < vertical
 }

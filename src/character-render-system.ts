@@ -38,13 +38,14 @@ export function createCharacterRenderSystem(options: {
   const boxInstanceCache: NumberBufferCache = { data: new Float32Array(0) }
   const vertexUploadCache: NumberBufferCache = { data: new Float32Array(0) }
   const drawCache: CharacterDrawCache = {
+    basePoses: new Map(),
     boxInstances: [],
     hairInstances: [],
     npcBlendCache: new Map(),
     poses: [],
     vertices: [],
   }
-  const hairInstanceCache: HairInstanceUploadCache = { buffers: [], grouped: [], uploads: [] }
+  const hairInstanceCache: HairInstanceUploadCache = { buffers: [], counts: [], uploads: [] }
   const vertexCache: VertexBufferCache = { data: new Float32Array(0) }
 
   async function loadAssets(hairIndex: number) {

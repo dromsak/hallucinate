@@ -22,6 +22,7 @@ const inputDirections: Vec3[] = [
   [-1, 0, -1],
 ]
 const inputCrossingDestination: PlayerDestination = { outside: false, position: [backDoor.x, characterFloor, 0] }
+const updateCrossingDestination: PlayerDestination = { outside: false, position: [backDoor.x, characterFloor, 0] }
 
 export function createPlayers(count: number, outsideTree: CircleBounds) {
   const next: Player[] = []
@@ -58,11 +59,9 @@ export function createPlayers(count: number, outsideTree: CircleBounds) {
 }
 
 export function updatePlayers(players: Player[], delta: number, time: number, outsideTree: CircleBounds) {
-  const crossingDestination: PlayerDestination = { outside: false, position: [backDoor.x, characterFloor, 0] }
-
   for (const player of players) {
     const outside = isOutside(player.position)
-    const destination = activePlayerDestination(player, outside, crossingDestination)
+    const destination = activePlayerDestination(player, outside, updateCrossingDestination)
     const dx = destination.position[0] - player.position[0]
     const dz = destination.position[2] - player.position[2]
     const distance = Math.sqrt(dx * dx + dz * dz)
@@ -77,12 +76,13 @@ export function updatePlayers(players: Player[], delta: number, time: number, ou
       player.nextDecision = time + seededRange(player.seed, Math.floor(time * 3.1), 0.45, 2.4)
     }
 
-    const moving = lengthSq(player.input) > 0
+    const inputLengthSq = lengthSq(player.input)
+    const moving = inputLengthSq > 0
 
     player.motionBlend = mix(player.motionBlend, moving ? 1 : 0, 1 - Math.exp(-7 * delta))
 
     if (moving) {
-      const inputLength = Math.sqrt(lengthSq(player.input))
+      const inputLength = Math.sqrt(inputLengthSq)
       const directionX = player.input[0] / inputLength
       const directionZ = player.input[2] / inputLength
 

@@ -5,8 +5,8 @@ import type { AssimpMesh, AssimpScene, HairMesh, HairRenderMesh, Vec3 } from './
 
 export type HairInstanceUploadCache = {
   buffers: Float32Array[]
+  counts: number[]
   uploads: NumberBufferCache[]
-  grouped: number[][]
 }
 
 export function createHairMeshes(scene: AssimpScene, source: string): HairMesh[] {
@@ -113,67 +113,66 @@ export function updateHairInstances(
   hairInstances: number[],
   cache?: HairInstanceUploadCache,
 ) {
-  const grouped = cache ? resizeHairInstanceGroups(cache, hairRenderMeshes.length) : createHairInstanceGroups(
-    hairRenderMeshes.length)
+  const uploadCache = cache ?? {
+    buffers: Array.from({ length: hairRenderMeshes.length }, () => new Float32Array(0)),
+    counts: new Array<number>(hairRenderMeshes.length).fill(0),
+    uploads: [],
+  }
+
+  resizeHairInstanceBuffers(uploadCache, hairRenderMeshes.length)
 
   for (let i = 0; i < hairInstances.length; i += 16) {
-    const data = grouped[hairInstances[i]!]!
+    const meshIndex = hairInstances[i]!
+    const offset = uploadCache.counts[meshIndex]!
+    const buffer = growHairInstanceBuffer(uploadCache, meshIndex, offset + 15)
 
-    data.push(
-      hairInstances[i + 1]!,
-      hairInstances[i + 2]!,
-      hairInstances[i + 3]!,
-      hairInstances[i + 4]!,
-      hairInstances[i + 5]!,
-      hairInstances[i + 6]!,
-      hairInstances[i + 7]!,
-      hairInstances[i + 8]!,
-      hairInstances[i + 9]!,
-      hairInstances[i + 10]!,
-      hairInstances[i + 11]!,
-      hairInstances[i + 12]!,
-      hairInstances[i + 13]!,
-      hairInstances[i + 14]!,
-      hairInstances[i + 15]!,
-    )
+    buffer[offset] = hairInstances[i + 1]!
+    buffer[offset + 1] = hairInstances[i + 2]!
+    buffer[offset + 2] = hairInstances[i + 3]!
+    buffer[offset + 3] = hairInstances[i + 4]!
+    buffer[offset + 4] = hairInstances[i + 5]!
+    buffer[offset + 5] = hairInstances[i + 6]!
+    buffer[offset + 6] = hairInstances[i + 7]!
+    buffer[offset + 7] = hairInstances[i + 8]!
+    buffer[offset + 8] = hairInstances[i + 9]!
+    buffer[offset + 9] = hairInstances[i + 10]!
+    buffer[offset + 10] = hairInstances[i + 11]!
+    buffer[offset + 11] = hairInstances[i + 12]!
+    buffer[offset + 12] = hairInstances[i + 13]!
+    buffer[offset + 13] = hairInstances[i + 14]!
+    buffer[offset + 14] = hairInstances[i + 15]!
+    uploadCache.counts[meshIndex] = offset + 15
   }
 
   for (let i = 0; i < hairRenderMeshes.length; i++) {
     const mesh = hairRenderMeshes[i]!
-    const data = grouped[i]!
-    const buffer = cache ? fillHairInstanceBuffer(cache, i, data) : new Float32Array(data)
-    const upload = cache ? cache.uploads[i] ??= { data: buffer } : undefined
+    const count = uploadCache.counts[i]!
+    const buffer = uploadCache.buffers[i]!.length === count ? uploadCache.buffers[i]! : uploadCache.buffers[i]!.subarray(
+      0, count)
+    const upload = uploadCache.uploads[i] ??= { data: buffer }
 
-    mesh.instanceCount = data.length / 15
+    mesh.instanceCount = count / 15
     uploadFloatBuffer(context, mesh.instanceBuffer, buffer, upload)
   }
 }
 
-function createHairInstanceGroups(length: number) {
-  return Array.from({ length }, () => [] as number[])
-}
-
-function resizeHairInstanceGroups(cache: HairInstanceUploadCache, length: number) {
-  while (cache.grouped.length < length) {
-    cache.grouped.push([])
+function resizeHairInstanceBuffers(cache: HairInstanceUploadCache, length: number) {
+  while (cache.buffers.length < length) {
+    cache.buffers.push(new Float32Array(0))
+    cache.counts.push(0)
   }
 
   for (let i = 0; i < length; i++) {
-    cache.grouped[i]!.length = 0
+    cache.counts[i] = 0
   }
-
-  return cache.grouped
 }
 
-function fillHairInstanceBuffer(cache: HairInstanceUploadCache, index: number, data: number[]) {
-  if (!cache.buffers[index] || cache.buffers[index]!.length < data.length) {
-    cache.buffers[index] = new Float32Array(data.length)
+function growHairInstanceBuffer(cache: HairInstanceUploadCache, index: number, length: number) {
+  if (cache.buffers[index]!.length < length) {
+    cache.buffers[index] = new Float32Array(length)
   }
 
-  cache.buffers[index]!.set(data)
-
-  return cache.buffers[index]!.length === data.length ? cache.buffers[index]! : cache.buffers[index]!.subarray(0,
-    data.length)
+  return cache.buffers[index]!
 }
 
 export function normalizeHairPoints(points: Vec3[], turnRightSideForward: boolean): Vec3[] {
