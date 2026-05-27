@@ -143,6 +143,7 @@ export type ResolvedPlayerStyle = {
 }
 
 export type PlayerDestination = {
+  outside: boolean
   position: Vec3
   lookAt?: Vec3
 }
@@ -187,7 +188,11 @@ export type StrobeLight = {
 
 export type StrobeReflectionLight = {
   light: StrobeLight
+  lightX: number
+  lightZ: number
   target: Vec3
+  targetX: number
+  targetZ: number
 }
 
 export type Vertex = [

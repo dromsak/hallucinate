@@ -60,10 +60,8 @@ export function createDjVideoUi(
       zone = isOutside(position) ? 'outside' : 'inside'
     },
     syncCurrentTime() {
-      for (const area of videoZones()) {
-        if (ready[area]) {
-          times[area] = players[area]!.getCurrentTime()
-        }
+      if (ready[zone]) {
+        times[zone] = players[zone]!.getCurrentTime()
       }
     },
     load() {

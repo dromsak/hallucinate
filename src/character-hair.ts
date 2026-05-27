@@ -1,8 +1,11 @@
+import { uploadFloatBuffer } from './character-gpu.ts'
 import { scale, subtract } from './math.ts'
+import type { NumberBufferCache } from './character-gpu.ts'
 import type { AssimpMesh, AssimpScene, HairInstance, HairMesh, HairRenderMesh, Vec3 } from './types.ts'
 
 export type HairInstanceUploadCache = {
   buffers: Float32Array[]
+  uploads: NumberBufferCache[]
   grouped: number[][]
 }
 
@@ -139,10 +142,10 @@ export function updateHairInstances(
     const mesh = hairRenderMeshes[i]!
     const data = grouped[i]!
     const buffer = cache ? fillHairInstanceBuffer(cache, i, data) : new Float32Array(data)
+    const upload = cache ? cache.uploads[i] ??= { data: buffer } : undefined
 
     mesh.instanceCount = data.length / 15
-    context.bindBuffer(context.ARRAY_BUFFER, mesh.instanceBuffer)
-    context.bufferData(context.ARRAY_BUFFER, buffer, context.DYNAMIC_DRAW)
+    uploadFloatBuffer(context, mesh.instanceBuffer, buffer, upload)
   }
 }
 

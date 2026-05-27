@@ -1,21 +1,28 @@
 export function getDomElements() {
-  const canvas = document.querySelector<HTMLCanvasElement>('#scene')!
-  const djVideo = document.querySelector<HTMLElement>('#dj-video')!
-  const chatForm = document.querySelector<HTMLFormElement>('#chat-form')!
-  const chatInput = document.querySelector<HTMLInputElement>('#chat-input')!
-  const chatBubble = document.querySelector<HTMLDivElement>('#chat-bubble')!
+  const canvas = document.createElement('canvas')
+  const djVideo = document.createElement('div')
+  const chatForm = document.createElement('form')
+  const chatInput = document.createElement('input')
+  const chatBubble = document.createElement('div')
 
-  if (!canvas) {
-    throw new Error('Missing scene canvas')
-  }
+  canvas.id = 'scene'
+  canvas.className = 'block h-dvh w-dvw'
 
-  if (!djVideo) {
-    throw new Error('Missing DJ video element')
-  }
+  djVideo.id = 'dj-video'
+  djVideo.className = 'absolute border-0 opacity-0'
 
-  if (!chatForm || !chatInput || !chatBubble) {
-    throw new Error('Missing chat elements')
-  }
+  chatForm.id = 'chat-form'
+  chatForm.className = 'absolute opacity-0'
+
+  chatInput.id = 'chat-input'
+  chatInput.maxLength = 80
+  chatInput.autocomplete = 'off'
+
+  chatBubble.id = 'chat-bubble'
+  chatBubble.className = 'absolute opacity-0'
+
+  chatForm.append(chatInput)
+  document.body.prepend(canvas, djVideo, chatForm, chatBubble)
 
   return {
     canvas,

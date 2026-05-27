@@ -2,16 +2,28 @@ import { characterFloor } from './character-data.ts'
 import { electricNavy } from './constants.ts'
 import { clamp, mix, smoothstep } from './math.ts'
 import { outsideDjBooth, roomBounds } from './scene-data.ts'
-import type { StrobeLight, Vec3 } from './types.ts'
+import type { StrobeLight, StrobeReflectionLight, Vec3 } from './types.ts'
 
 export function strobeLightAmount(point: Vec3, normal: Vec3, light: StrobeLight, target: Vec3) {
+  return strobeReflectionAmount(point, normal, {
+    light,
+    lightX: light.x,
+    lightZ: light.z,
+    target,
+    targetX: target[0],
+    targetZ: target[2],
+  })
+}
+
+export function strobeReflectionAmount(point: Vec3, normal: Vec3, setup: StrobeReflectionLight) {
   const top = 4.75
   const floor = -1.96
-  const t = clamp((top - point[1]) / (top - floor), 0, 1)
-  const radiusX = mix(0.07, 0.5, t)
-  const radiusZ = mix(0.07, 0.68, t)
-  const centerX = mix(light.x, target[0], t)
-  const centerZ = mix(light.z, target[2], t)
+  const rawT = (top - point[1]) / (top - floor)
+  const t = Math.min(Math.max(rawT, 0), 1)
+  const radiusX = 0.07 + 0.43 * t
+  const radiusZ = 0.07 + 0.61 * t
+  const centerX = setup.lightX + (setup.targetX - setup.lightX) * t
+  const centerZ = setup.lightZ + (setup.targetZ - setup.lightZ) * t
   const dx = (point[0] - centerX) / radiusX
   const dz = (point[2] - centerZ) / radiusZ
   const cone = dx * dx + dz * dz
@@ -20,9 +32,9 @@ export function strobeLightAmount(point: Vec3, normal: Vec3, light: StrobeLight,
     return 0
   }
 
-  const lx = light.x - point[0]
+  const lx = setup.lightX - point[0]
   const ly = top - point[1]
-  const lz = light.z - point[2]
+  const lz = setup.lightZ - point[2]
   const length = Math.sqrt(lx * lx + ly * ly + lz * lz)
   const facing = Math.max(0, (normal[0] * lx + normal[1] * ly + normal[2] * lz) / length)
   const inside = Math.pow(1 - cone, 0.45)

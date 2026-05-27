@@ -1,6 +1,6 @@
 import { uploadFloatBuffer } from './character-gpu.ts'
 import { isOutside } from './scene.ts'
-import { strobeLightAmount, strobeRandom, strobeTarget } from './strobe-object.ts'
+import { strobeRandom, strobeReflectionAmount, strobeTarget } from './strobe-object.ts'
 import type { CharacterBoxGeometry, StrobeLight, StrobeReflectionLight, Vec3, VideoZone } from './types.ts'
 
 type Camera = { eye: Vec3; center: Vec3 }
@@ -99,7 +99,7 @@ export function createStrobeDrawController(options: StrobeDrawOptions) {
       let amount = 0
 
       for (const setup of activeReflectionLights()) {
-        amount = Math.max(amount, strobeLightAmount(point, normal, setup.light, setup.target))
+        amount = Math.max(amount, strobeReflectionAmount(point, normal, setup))
       }
 
       return amount
@@ -115,9 +115,15 @@ export function createStrobeDrawController(options: StrobeDrawOptions) {
         const strobe = Math.floor(strobeRandom(light.id, frame) + 0.18)
 
         if (strobe > 0) {
+          const target = strobeTarget(light, frame / 60)
+
           reflectionLights.push({
             light,
-            target: strobeTarget(light, frame / 60),
+            lightX: light.x,
+            lightZ: light.z,
+            target,
+            targetX: target[0],
+            targetZ: target[2],
           })
         }
       }

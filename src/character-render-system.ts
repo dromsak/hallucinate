@@ -44,7 +44,7 @@ export function createCharacterRenderSystem(options: {
     poses: [],
     vertices: [],
   }
-  const hairInstanceCache: HairInstanceUploadCache = { buffers: [], grouped: [] }
+  const hairInstanceCache: HairInstanceUploadCache = { buffers: [], grouped: [], uploads: [] }
   const vertexCache: VertexBufferCache = { data: new Float32Array(0) }
 
   async function loadAssets(hairIndex: number) {

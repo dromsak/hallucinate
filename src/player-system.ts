@@ -21,7 +21,7 @@ const inputDirections: Vec3[] = [
   [1, 0, -1],
   [-1, 0, -1],
 ]
-const inputCrossingDestination: PlayerDestination = { position: [backDoor.x, characterFloor, 0] }
+const inputCrossingDestination: PlayerDestination = { outside: false, position: [backDoor.x, characterFloor, 0] }
 
 export function createPlayers(count: number, outsideTree: CircleBounds) {
   const next: Player[] = []
@@ -58,10 +58,11 @@ export function createPlayers(count: number, outsideTree: CircleBounds) {
 }
 
 export function updatePlayers(players: Player[], delta: number, time: number, outsideTree: CircleBounds) {
-  const crossingDestination: PlayerDestination = { position: [backDoor.x, characterFloor, 0] }
+  const crossingDestination: PlayerDestination = { outside: false, position: [backDoor.x, characterFloor, 0] }
 
   for (const player of players) {
-    const destination = activePlayerDestination(player, crossingDestination)
+    const outside = isOutside(player.position)
+    const destination = activePlayerDestination(player, outside, crossingDestination)
     const dx = destination.position[0] - player.position[0]
     const dz = destination.position[2] - player.position[2]
     const distance = Math.sqrt(dx * dx + dz * dz)
@@ -87,7 +88,7 @@ export function updatePlayers(players: Player[], delta: number, time: number, ou
 
       player.position[0] += directionX * delta * 2.55
       player.position[2] += directionZ * delta * 2.55
-      collideRoom(player.position, outsideTree)
+      collideRoom(player.position, outsideTree, isOutside(player.position))
       player.turn = smoothAngle(player.turn, Math.atan2(directionX, directionZ), 8, delta)
     }
     else if (destination.lookAt) {
@@ -111,7 +112,7 @@ function choosePlayerInput(player: Player, time: number) {
     return
   }
 
-  const destination = activePlayerDestination(player, inputCrossingDestination)
+  const destination = activePlayerDestination(player, isOutside(player.position), inputCrossingDestination)
   const dx = destination.position[0] - player.position[0]
   const dz = destination.position[2] - player.position[2]
   const angle = Math.atan2(dx, dz) + seededRange(player.seed, Math.floor(time * 5.3), -0.75, 0.75)
@@ -123,14 +124,16 @@ function choosePlayerInput(player: Player, time: number) {
   player.input[2] = input[2]
 }
 
-function activePlayerDestination(player: Player, crossingDestination: PlayerDestination): PlayerDestination {
-  const outside = isOutside(player.position)
-  const destinationOutside = isOutside(player.destination.position)
-
-  if (outside === destinationOutside) {
+function activePlayerDestination(
+  player: Player,
+  outside: boolean,
+  crossingDestination: PlayerDestination,
+): PlayerDestination {
+  if (outside === player.destination.outside) {
     return player.destination
   }
 
+  crossingDestination.outside = outside
   crossingDestination.position[2] = outside ? roomBounds.front - 0.75 : roomBounds.front + 0.75
 
   return crossingDestination
@@ -142,29 +145,30 @@ function playerDestination(seed: number, step: number, outsideTree: CircleBounds
   const jitterZ = seededRange(seed, step + 102, -1.4, 1.4)
 
   if (choice === 0) {
-    return { position: [jitterX, characterFloor, djBooth.z + 2.2 + jitterZ],
+    return { outside: false, position: [jitterX, characterFloor, djBooth.z + 2.2 + jitterZ],
       lookAt: [djBooth.x, characterFloor, djBooth.z] }
   }
 
   if (choice === 1) {
-    return { position: [bartenderBar.x + jitterX, characterFloor, bartenderBar.z - 1.55 + jitterZ * 0.35] }
+    return { outside: false, position: [bartenderBar.x + jitterX, characterFloor, bartenderBar.z - 1.55 + jitterZ * 0.35] }
   }
 
   if (choice === 2) {
-    return { position: [backDoor.x + jitterX * 0.35, characterFloor, roomBounds.front - 1.3 + jitterZ * 0.3] }
+    return { outside: false, position: [backDoor.x + jitterX * 0.35, characterFloor, roomBounds.front - 1.3 + jitterZ * 0.3] }
   }
 
   if (choice === 3) {
-    return { position: [outsideTree.x + jitterX, characterFloor, outsideTree.z - 2.4 + jitterZ],
+    return { outside: true, position: [outsideTree.x + jitterX, characterFloor, outsideTree.z - 2.4 + jitterZ],
       lookAt: [outsideTree.x, characterFloor, outsideTree.z] }
   }
 
   if (choice === 4) {
-    return { position: [outsideDjBooth.x + jitterX, characterFloor, outsideDjBooth.z - 2.6 + jitterZ],
+    return { outside: true, position: [outsideDjBooth.x + jitterX, characterFloor, outsideDjBooth.z - 2.6 + jitterZ],
       lookAt: [outsideDjBooth.x, characterFloor, outsideDjBooth.z] }
   }
 
   return {
+    outside: false,
     position: [seededRange(seed, step + 103, roomBounds.left + 1.2, roomBounds.right - 1.2), characterFloor,
       seededRange(seed, step + 104, roomBounds.back + 2.2, roomBounds.front - 2.0)],
   }

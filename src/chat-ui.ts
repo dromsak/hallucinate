@@ -32,6 +32,10 @@ export function createChatUi(
       input.blur()
     },
     update(projector: WallProjector, stamp: number) {
+      if (form.dataset.open !== 'true' && bubble.dataset.open !== 'true') {
+        return
+      }
+
       const point = projectWallPoint([position[0], position[1] + 1.05, position[2]], projector)
       const x = Math.round(point.x)
       const y = Math.round(point.y - 68)
