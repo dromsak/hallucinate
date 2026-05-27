@@ -21,7 +21,10 @@ import {
   sampleCharacterPose,
   validateCharacterRig,
 } from './character-rig.ts'
+import { applyBottomStyle, applyTopStyle, resolvePlayerStyle } from './character-style.ts'
+import { createChatUi } from './chat-ui.ts'
 import { electricNavy, outsideMotif } from './constants.ts'
+import { createDjVideoUi } from './dj-video-ui.ts'
 import { addRoom, addRoomSmoke, addWallStrips } from './environment-object.ts'
 import { addQuad } from './geometry.ts'
 import { bindKeyboardInput, readMoveInput } from './input.ts'
@@ -42,7 +45,6 @@ import {
   smoothstep,
   subtract,
 } from './math.ts'
-import { projectedQuadTransform, projectWallPoint } from './projection.ts'
 import {
   collideBuildingWalls,
   collideRoom,
@@ -56,14 +58,11 @@ import {
   bartenderStools,
   djBooth,
   djSpeakers,
-  djVideoWall,
   landscapeBounds,
   outsideBounds,
   outsideDjBooth,
   outsideDjSpeakers,
-  outsideVideoWall,
   roomBounds,
-  videoTracks,
 } from './scene-data.ts'
 import {
   characterBoxFragment,
@@ -103,9 +102,6 @@ import type {
   TreeMesh,
   Vec3,
   Vertex,
-  VideoZone,
-  YouTubePlayer,
-  YouTubeWindow,
 } from './types.ts'
 import {
   createCharacterBoxGeometry,
@@ -125,14 +121,6 @@ if (clubGlobal.clubFrameId !== undefined) {
 
 const canvas = document.querySelector<HTMLCanvasElement>('#scene')!
 const djVideo = document.querySelector<HTMLElement>('#dj-video')!
-const djVideoLayers: Record<VideoZone, HTMLElement> = {
-  inside: document.createElement('div'),
-  outside: document.createElement('div'),
-}
-const djVideoMounts: Record<VideoZone, HTMLElement> = {
-  inside: document.createElement('div'),
-  outside: document.createElement('div'),
-}
 const chatForm = document.querySelector<HTMLFormElement>('#chat-form')!
 const chatInput = document.querySelector<HTMLInputElement>('#chat-input')!
 const chatBubble = document.querySelector<HTMLDivElement>('#chat-bubble')!
@@ -143,22 +131,6 @@ if (!canvas) {
 
 if (!djVideo) {
   throw new Error('Missing DJ video element')
-}
-
-for (const zone of videoZones()) {
-  const layer = djVideoLayers[zone]
-  const mount = djVideoMounts[zone]
-
-  layer.style.position = 'absolute'
-  layer.style.inset = '0'
-  layer.style.width = '100%'
-  layer.style.height = '100%'
-  layer.style.opacity = '0'
-  layer.style.pointerEvents = 'none'
-  mount.style.width = '100%'
-  mount.style.height = '100%'
-  layer.append(mount)
-  djVideo.append(layer)
 }
 
 if (!chatForm || !chatInput || !chatBubble) {
@@ -195,12 +167,10 @@ const forward: Vec3 = [0, 0, 0]
 const right: Vec3 = [0, 0, 0]
 const direction: Vec3 = [0, 0, 0]
 const characterPosition: Vec3 = [-2.2, -1.95, -6.8]
+const chatUi = createChatUi(chatForm, chatInput, chatBubble, canvas, characterPosition)
+const djVideoUi = createDjVideoUi(djVideo, canvas, characterPosition)
 const cameraPosition: Vec3 = [-2.2, 0.15, -9.0]
 const cameraTarget: Vec3 = [-2.2, -0.75, -6.8]
-const videoTimes: Record<VideoZone, number> = {
-  inside: 0,
-  outside: 0,
-}
 let outsideTree: CircleBounds = { x: 0, z: 20.5, radius: 0.75 }
 let cameraTurn = 0
 let cameraDragX = 0
@@ -214,12 +184,6 @@ let floorY = -1.95
 let velocityY = 0
 let lastStamp = 0
 let saveTime = 0
-let chatHideAt = 0
-let chatOverlayX = Number.NaN
-let chatOverlayY = Number.NaN
-const videoPlayers: Partial<Record<VideoZone, YouTubePlayer>> = {}
-const videoPlayersReady: Partial<Record<VideoZone, boolean>> = {}
-let videoZone: VideoZone = isOutside(characterPosition) ? 'outside' : 'inside'
 
 addRoom(vertices)
 addWallStrips(lights)
@@ -489,7 +453,7 @@ bindKeyboardInput({
 
 chatForm.addEventListener('submit', event => {
   event.preventDefault()
-  submitChatInput()
+  chatUi.submit()
 })
 
 const resize = () => {
@@ -518,8 +482,8 @@ const draw = (stamp: number) => {
   const camera = getCamera()
   const lightCount = updateLightBuffer(stamp * 0.001)
 
-  updateDjVideo(camera)
-  updateChatOverlay(camera, stamp)
+  djVideoUi.update(camera)
+  chatUi.update(camera, stamp)
 
   const outside = isOutside(characterPosition)
   const sky = usesSkyBackground(camera)
@@ -733,7 +697,7 @@ function updateStrobeInstances(time: number) {
   strobeInstances.length = 0
 
   for (const light of strobeLights) {
-    if (light.zone !== videoZone) {
+    if (light.zone !== djVideoUi.zone) {
       continue
     }
 
@@ -780,8 +744,8 @@ let pantsColorIndex = 0
 let bottomStyleIndex = 0
 let bottomMode: BottomMode = 'pants'
 restoreState()
-videoZone = isOutside(characterPosition) ? 'outside' : 'inside'
-loadYouTubePlayer()
+djVideoUi.setZoneFromPosition()
+djVideoUi.load()
 const wallLightZ = [-2, -6, -10, -14, -18, -22]
 const backLightX = [-4.5, 0, 4.5]
 const strobeLights = createStrobeLights()
@@ -1064,7 +1028,7 @@ function addRenderedCharacter(
 ) {
   const pose = sampleCharacterPose(characterRig!, time, player, characterPoseJoints, characterPoseJointSet,
     characterGroundJoints, characterScale, basePose, blendCache)
-  const style = player.resolvedStyle ?? playerStyle(player.style)
+  const style = player.resolvedStyle ?? resolvePlayerStyle(player.style)
   const localReflection = detailedHair
 
   for (const part of characterParts) {
@@ -1111,7 +1075,7 @@ function addCharacterPart(
   pose: Map<string, Vec3>,
   part: CharacterPart,
   player: { turn: number },
-  style: ReturnType<typeof playerStyle>,
+  style: ResolvedPlayerStyle,
   localReflection: boolean,
 ) {
   const from = pose.get(part.from)!
@@ -1144,7 +1108,7 @@ function addCharacterPart(
     localReflection)
 }
 
-function characterPartColor(part: CharacterPart, style: ReturnType<typeof playerStyle>) {
+function characterPartColor(part: CharacterPart, style: ResolvedPlayerStyle) {
   if (part.top === 'torso') {
     return style.topMode === 'shirt' || style.topMode === 'sleeveless' ? style.shirtLight : skin
   }
@@ -1188,7 +1152,7 @@ function addCharacterSkirt(
   target: Vertex[],
   pose: Map<string, Vec3>,
   player: { turn: number },
-  style: ReturnType<typeof playerStyle>,
+  style: ResolvedPlayerStyle,
   localReflection: boolean,
 ) {
   const hips = pose.get('mixamorig:Hips')!
@@ -1549,7 +1513,7 @@ function restoreState() {
     topStyleIndex?: number
     pantsColorIndex?: number
     bottomStyleIndex?: number
-    videoTimes?: Partial<Record<VideoZone, number>>
+    videoTimes?: Partial<typeof djVideoUi.times>
   } | null
 
   if (state) {
@@ -1565,15 +1529,15 @@ function restoreState() {
       jewelPalette.length * 2 + 2)
     bottomStyleIndex = normalizeIndex(state.bottomStyleIndex ?? state.pantsColorIndex ?? bottomStyleIndex,
       jewelPalette.length * 2)
-    videoTimes.inside = state.videoTimes?.inside ?? videoTimes.inside
-    videoTimes.outside = state.videoTimes?.outside ?? videoTimes.outside
+    djVideoUi.times.inside = state.videoTimes?.inside ?? djVideoUi.times.inside
+    djVideoUi.times.outside = state.videoTimes?.outside ?? djVideoUi.times.outside
     setTopStyle()
     setBottomStyle()
   }
 }
 
 function saveState() {
-  syncCurrentVideoTime()
+  djVideoUi.syncCurrentTime()
 
   localStorage.setItem(saveKey, JSON.stringify({
     character: characterPosition,
@@ -1587,7 +1551,7 @@ function saveState() {
     topStyleIndex,
     pantsColorIndex,
     bottomStyleIndex,
-    videoTimes,
+    videoTimes: djVideoUi.times,
   }))
 }
 
@@ -1597,14 +1561,6 @@ function updateSave(delta: number) {
   if (saveTime >= 0.5) {
     saveState()
     saveTime = 0
-  }
-}
-
-function syncCurrentVideoTime() {
-  for (const zone of videoZones()) {
-    if (videoPlayersReady[zone]) {
-      videoTimes[zone] = videoPlayers[zone]!.getCurrentTime()
-    }
   }
 }
 
@@ -1676,7 +1632,7 @@ function createPlayers(count: number) {
       nextDecision: seededRange(seed, 13, 0.3, 2.8),
       destination,
       style,
-      resolvedStyle: playerStyle(style),
+      resolvedStyle: resolvePlayerStyle(style),
       seed,
     })
   }
@@ -1890,23 +1846,7 @@ function getCamera() {
 }
 
 function openChatInput() {
-  chatInput.value = ''
-  chatForm.dataset.open = 'true'
-  chatBubble.dataset.open = 'false'
-  chatInput.focus()
-}
-
-function submitChatInput() {
-  const text = chatInput.value.trim()
-
-  if (text) {
-    chatBubble.textContent = text
-    chatBubble.dataset.open = 'true'
-    chatHideAt = performance.now() + 5000
-  }
-
-  chatForm.dataset.open = 'false'
-  chatInput.blur()
+  chatUi.open()
 }
 
 function cycleHair(direction: number) {
@@ -1937,20 +1877,10 @@ function cycleShirt(direction: number) {
 }
 
 function setTopStyle() {
-  if (topStyleIndex < jewelPalette.length) {
-    topMode = 'shirt'
-    shirtColorIndex = topStyleIndex
-  }
-  else if (topStyleIndex < jewelPalette.length * 2) {
-    topMode = 'sleeveless'
-    shirtColorIndex = topStyleIndex - jewelPalette.length
-  }
-  else {
-    topMode = topStyleIndex === jewelPalette.length * 2 ? 'skin' : 'chest'
-  }
+  const style = applyTopStyle(topStyleIndex)
 
-  setVec3(shirt, jewelPalette[shirtColorIndex]!)
-  setVec3(shirtLight, scale(jewelPalette[shirtColorIndex]!, 1.35))
+  topMode = style.mode
+  shirtColorIndex = style.colorIndex
 }
 
 function cyclePants(direction: number) {
@@ -1959,39 +1889,10 @@ function cyclePants(direction: number) {
 }
 
 function setBottomStyle() {
-  bottomMode = bottomStyleIndex < jewelPalette.length ? 'pants' : 'skirt'
-  pantsColorIndex = bottomStyleIndex % jewelPalette.length
-  setVec3(pants, jewelPalette[pantsColorIndex]!)
-  setVec3(shoe, scale(jewelPalette[pantsColorIndex]!, 0.72))
-}
+  const style = applyBottomStyle(bottomStyleIndex)
 
-function playerStyle(style: PlayerStyle) {
-  const topIndex = normalizeIndex(style.topStyleIndex, jewelPalette.length * 2 + 2)
-  const bottomIndex = normalizeIndex(style.bottomStyleIndex, jewelPalette.length * 2)
-  const shirtIndex = topIndex < jewelPalette.length
-    ? topIndex
-    : topIndex < jewelPalette.length * 2
-    ? topIndex - jewelPalette.length
-    : 0
-  const topMode = topIndex < jewelPalette.length
-    ? 'shirt'
-    : topIndex < jewelPalette.length * 2
-    ? 'sleeveless'
-    : topIndex === jewelPalette.length * 2
-    ? 'skin'
-    : 'chest'
-  const bottomMode = bottomIndex < jewelPalette.length ? 'pants' : 'skirt'
-  const pantsColor = jewelPalette[bottomIndex % jewelPalette.length]!
-
-  return {
-    topMode: topMode as TopMode,
-    bottomMode: bottomMode as BottomMode,
-    shirt: jewelPalette[shirtIndex]!,
-    shirtLight: scale(jewelPalette[shirtIndex]!, 1.35),
-    pants: pantsColor,
-    shoe: scale(pantsColor, 0.72),
-    hairColor: hairPalette[normalizeIndex(style.hairColorIndex, hairPalette.length)]!,
-  }
+  bottomMode = style.mode
+  pantsColorIndex = style.colorIndex
 }
 
 function playerHair(index: number) {
@@ -2001,148 +1902,3 @@ function playerHair(index: number) {
 
   return characterHairMeshes[normalizeIndex(index - 1, characterHairMeshes.length)]!
 }
-
-function updateChatOverlay(camera: ReturnType<typeof getCamera>, stamp: number) {
-  const point = projectWallPoint([characterPosition[0], characterPosition[1] + 1.05, characterPosition[2]], camera,
-    canvas)
-  const x = Math.round(point.x)
-  const y = Math.round(point.y - 68)
-
-  if (x !== chatOverlayX || y !== chatOverlayY) {
-    chatOverlayX = x
-    chatOverlayY = y
-    chatForm.style.transform = `translate(-50%, -100%) translate(${x}px, ${y}px)`
-    chatBubble.style.transform = `translate(-50%, -100%) translate(${x}px, ${y - 8}px)`
-  }
-
-  if (chatBubble.dataset.open === 'true' && stamp > chatHideAt) {
-    chatBubble.dataset.open = 'false'
-  }
-}
-
-function updateDjVideo(camera: ReturnType<typeof getCamera>) {
-  updateVideoTrack()
-
-  const wall = isOutside(characterPosition) ? outsideVideoWall : djVideoWall
-
-  if (!djVideoFacesCamera(camera, wall)) {
-    djVideo.style.opacity = '0'
-    djVideoLayers.inside.style.pointerEvents = 'none'
-    djVideoLayers.outside.style.pointerEvents = 'none'
-    return
-  }
-
-  const left = wall.x - wall.width / 2
-  const right = wall.x + wall.width / 2
-  const bottom = wall.y - wall.height / 2
-  const top = wall.y + wall.height / 2
-  const points = wall.normal[2] < 0
-    ? [
-      projectWallPoint([right, bottom, wall.z], camera, canvas),
-      projectWallPoint([left, bottom, wall.z], camera, canvas),
-      projectWallPoint([left, top, wall.z], camera, canvas),
-      projectWallPoint([right, top, wall.z], camera, canvas),
-    ]
-    : [
-      projectWallPoint([left, bottom, wall.z], camera, canvas),
-      projectWallPoint([right, bottom, wall.z], camera, canvas),
-      projectWallPoint([right, top, wall.z], camera, canvas),
-      projectWallPoint([left, top, wall.z], camera, canvas),
-    ]
-
-  djVideo.style.opacity = '0.74'
-  djVideoLayers.inside.style.opacity = videoZone === 'inside' ? '1' : '0'
-  djVideoLayers.outside.style.opacity = videoZone === 'outside' ? '1' : '0'
-  djVideoLayers.inside.style.pointerEvents = videoZone === 'inside' ? 'auto' : 'none'
-  djVideoLayers.outside.style.pointerEvents = videoZone === 'outside' ? 'auto' : 'none'
-  djVideo.style.width = `${wall.width * 120}px`
-  djVideo.style.height = `${wall.height * 120}px`
-  djVideo.style.transform = projectedQuadTransform(
-    wall.width * 120,
-    wall.height * 120,
-    points,
-  )
-}
-
-function loadYouTubePlayer() {
-  const youtube = window as YouTubeWindow
-
-  youtube.onYouTubeIframeAPIReady = () => {
-    for (const zone of videoZones()) {
-      videoPlayers[zone] = new youtube.YT!.Player(djVideoMounts[zone], {
-        playerVars: {
-          autoplay: 0,
-          controls: 1,
-          playsinline: 1,
-          enablejsapi: 1,
-        },
-        events: {
-          onReady() {
-            videoPlayersReady[zone] = true
-            const load = zone === videoZone ? videoPlayers[zone]!.loadVideoById : videoPlayers[zone]!.cueVideoById
-
-            load.call(videoPlayers[zone]!, {
-              videoId: videoTracks[zone],
-              startSeconds: videoTimes[zone],
-            })
-
-            if (zone === videoZone) {
-              videoPlayers[zone]!.playVideo()
-            }
-            else {
-              videoPlayers[zone]!.pauseVideo()
-            }
-          },
-        },
-      })
-    }
-  }
-
-  if (youtube.YT?.Player) {
-    youtube.onYouTubeIframeAPIReady()
-  }
-  else {
-    const script = document.createElement('script')
-
-    script.src = 'https://www.youtube.com/iframe_api'
-    document.head.append(script)
-  }
-}
-
-function updateVideoTrack() {
-  const nextZone: VideoZone = isOutside(characterPosition) ? 'outside' : 'inside'
-
-  if (nextZone !== videoZone) {
-    if (videoPlayersReady[videoZone]) {
-      videoTimes[videoZone] = videoPlayers[videoZone]!.getCurrentTime()
-      videoPlayers[videoZone]!.pauseVideo()
-    }
-
-    videoZone = nextZone
-
-    if (videoPlayersReady[videoZone]) {
-      videoPlayers[videoZone]!.playVideo()
-    }
-  }
-}
-
-function videoZones(): VideoZone[] {
-  return ['inside', 'outside']
-}
-
-function djVideoFacesCamera(
-  camera: ReturnType<typeof getCamera>,
-  wall: typeof djVideoWall,
-) {
-  const center: Vec3 = [wall.x, wall.y, wall.z]
-  const toCamera = subtract(camera.eye, center)
-  const toVideo = subtract(center, camera.eye)
-  const forward = subtract(camera.center, camera.eye)
-
-  return dot(wall.normal, toCamera) > 0 && dot(forward, toVideo) > 0
-}
-
-
-
-
-
