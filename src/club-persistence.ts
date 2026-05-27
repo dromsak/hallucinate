@@ -59,6 +59,7 @@ export function saveClubState(options: {
   idleClipIndex: number
   key: string
   localCharacter: ReturnType<typeof createLocalCharacter>
+  room: number
   styleController: ReturnType<typeof createCharacterStyleController>
 }) {
   if (!options.characterAssetsLoaded) {
@@ -80,6 +81,7 @@ export function saveClubState(options: {
     topStyleIndex: options.styleController.topStyleIndex,
     pantsColorIndex: options.styleController.pantsColorIndex,
     bottomStyleIndex: options.styleController.bottomStyleIndex,
+    room: options.room,
     videoTimes: options.djVideoUi.times,
     videoTrackIndexes: options.djVideoUi.trackIndexes,
   })

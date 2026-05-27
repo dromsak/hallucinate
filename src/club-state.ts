@@ -13,6 +13,7 @@ export type ClubState = {
   topStyleIndex?: number
   pantsColorIndex?: number
   bottomStyleIndex?: number
+  room?: number
   videoTimes?: Partial<Record<VideoZone, number>>
   videoTrackIndexes?: Partial<Record<VideoZone, number>>
 }

@@ -1,21 +1,24 @@
 import { createAdaptivePixelRatio } from './adaptive-pixel-ratio.ts'
 import { createCameraController } from './camera-controller.ts'
 import { idleClipNames } from './character-assets.ts'
+import { characterFloor } from './character-data.ts'
 import { createCharacterHairController } from './character-hair-control.ts'
 import { createCharacterRenderSystem } from './character-render-system.ts'
 import { createCharacterStyleController } from './character-style.ts'
 import { createChatUi } from './chat-ui.ts'
 import { restoreClubState, saveClubState } from './club-persistence.ts'
 import { renderClubFrame } from './club-renderer.ts'
-import { createSaveTimer } from './club-state.ts'
+import { createSaveTimer, readClubState } from './club-state.ts'
 import { createDjVideoUi } from './dj-video-ui.ts'
 import { getDomElements } from './dom-elements.ts'
 import { addRoom, addRoomSmoke, addWallStrips } from './environment-object.ts'
 import { bindKeyboardInput } from './input.ts'
 import { createLocalCharacter } from './local-character.ts'
 import { lengthSq } from './math.ts'
+import { createMultiplayer, updateRemotePlayers } from './multiplayer.ts'
 import { createPlayers, updatePlayers } from './player-system.ts'
 import { createWallProjector } from './projection.ts'
+import { backDoor, roomBounds } from './scene-data.ts'
 import { createSceneLighting } from './scene-lighting.ts'
 import {
   isOutside,
@@ -41,6 +44,7 @@ import { loadOutsideTree } from './tree-world.ts'
 import type {
   CircleBounds,
   ClubGlobal,
+  Player,
   Vertex,
 } from './types.ts'
 import {
@@ -65,7 +69,7 @@ if (clubGlobal.clubFrameId !== undefined) {
   cancelAnimationFrame(clubGlobal.clubFrameId)
 }
 
-const { canvas, djVideo, chatForm, chatInput, chatBubble, intro, introProgress } = getDomElements()
+const { canvas, djVideo, chatForm, chatInput, chatBubble, roomButtons, intro, introProgress } = getDomElements()
 
 const gl = canvas.getContext('webgl2', {
   antialias: false,
@@ -111,6 +115,9 @@ let introHidden = false
 let videoPlaying = false
 let wasOutside = isOutside(characterPosition)
 let doorCoverReleased = true
+const savedState = readClubState(saveKey)
+let activeRoom = savedState?.room === 1 ? 1 : savedState ? Number(!isOutside(savedState.character)) : 0
+let requestedRoom = activeRoom
 const saveTimer = createSaveTimer(0.5)
 
 addRoom(vertices)
@@ -254,20 +261,115 @@ restoreClubState({
 djVideoUi.setZoneFromPosition()
 djVideoUi.load()
 
+function moveToRoom(room: number) {
+  characterPosition[0] = backDoor.x
+  characterPosition[1] = characterFloor
+  characterPosition[2] = room === 0 ? roomBounds.front + 0.85 : roomBounds.front - 0.85
+  localCharacter.velocityY = 0
+  djVideoUi.setZoneFromPosition()
+}
+
+if (activeRoom !== Number(!isOutside(characterPosition))) {
+  moveToRoom(activeRoom)
+}
+
+function localMoveAngle() {
+  const input = localCharacter.input
+  const sin = Math.sin(cameraController.turn)
+  const cos = Math.cos(cameraController.turn)
+  const x = sin * input[2] - cos * input[0]
+  const z = cos * input[2] + sin * input[0]
+
+  return Math.atan2(x, z)
+}
+
+function updateRoomButtons() {
+  roomButtons.forEach((button, room) => {
+    button.dataset.active = `${room === activeRoom}`
+  })
+}
+
+updateRoomButtons()
+
+let multiplayer: ReturnType<typeof createMultiplayer>
+
+multiplayer = createMultiplayer({
+  localPosition: characterPosition,
+  localTurn: () => localCharacter.turn,
+  localMoveAngle,
+  localInput: localCharacter.input,
+  localIdleClipIndex: () => idleClipIndex,
+  localStyle: () => ({
+    topStyleIndex: styleController.topStyleIndex,
+    bottomStyleIndex: styleController.bottomStyleIndex,
+    hairIndex: hairController.index,
+    hairColorIndex: hairController.colorIndex,
+  }),
+  initialRoom: activeRoom,
+  onRoomState: room => {
+    activeRoom = room
+    requestedRoom = room
+    saveClubState({
+      camera: cameraController,
+      characterAssetsLoaded: true,
+      characterPosition,
+      djVideoUi,
+      hairController,
+      idleClipIndex,
+      key: saveKey,
+      localCharacter,
+      room,
+      styleController,
+    })
+    chatUi.clear()
+    updateRoomButtons()
+  },
+  onMessage: (id, text) => {
+    const position = id === multiplayer.selfId ? characterPosition : multiplayer.players.get(id)!.position
+
+    chatUi.show(id, text, position, performance.now())
+  },
+  onLeave: id => chatUi.remove(id),
+})
+
 bindKeyboardInput({
   activeInput: chatInput,
   keys,
   openChatInput: () => chatUi.open(),
-  cycleHair: direction => hairController.cycleHair(direction),
-  cycleHairColor: direction => hairController.cycleColor(direction),
-  cycleIdle,
-  cycleShirt: direction => styleController.cycleShirt(direction),
-  cyclePants: direction => styleController.cyclePants(direction),
+  cycleHair: direction => {
+    hairController.cycleHair(direction)
+    multiplayer.sendMotion()
+  },
+  cycleHairColor: direction => {
+    hairController.cycleColor(direction)
+    multiplayer.sendMotion()
+  },
+  cycleIdle: direction => {
+    cycleIdle(direction)
+    multiplayer.sendMotion()
+  },
+  cycleShirt: direction => {
+    styleController.cycleShirt(direction)
+    multiplayer.sendMotion()
+  },
+  cyclePants: direction => {
+    styleController.cyclePants(direction)
+    multiplayer.sendMotion()
+  },
 })
 
 chatForm.addEventListener('submit', event => {
   event.preventDefault()
-  chatUi.submit()
+  multiplayer.sendMessage(chatUi.submit())
+})
+
+roomButtons.forEach((button, room) => {
+  button.addEventListener('click', () => {
+    moveToRoom(room)
+    requestedRoom = room
+    multiplayer.sendMotion()
+    multiplayer.sendRoomChange(room)
+  })
 })
 
 const resize = () => {
@@ -297,7 +399,21 @@ const draw = (stamp: number) => {
   clubGlobal.clubPixelRatio = pixelRatio.ratio()
   resize()
   localCharacter.update(delta, cameraController.turn, outsideTree, styleController.bottomMode, occupiedSeats)
-  updatePlayers(players, delta, stamp * 0.001, outsideTree, occupiedSeats)
+  const room = Number(!isOutside(characterPosition))
+
+  if (room !== requestedRoom) {
+    requestedRoom = room
+    multiplayer.sendMotion()
+    multiplayer.sendRoomChange(room)
+  }
+  else {
+    multiplayer.sendMotionIfKeysChanged()
+  }
+
+  updatePlayers(npcPlayers, delta, stamp * 0.001, outsideTree, occupiedSeats)
+  updateRemotePlayers(multiplayer.players.values(), delta, outsideTree)
+  renderPlayers.length = 0
+  renderPlayers.push(...npcPlayers, ...multiplayer.players.values())
   cameraController.update(delta, localCharacter.input, localCharacter.turn, lengthSq(localCharacter.input) > 0
     || (localCharacter.mode === 'stand' && idleClipIndex > 0))
   saveTimer.update(delta, () =>
@@ -310,6 +426,7 @@ const draw = (stamp: number) => {
       idleClipIndex,
       key: saveKey,
       localCharacter,
+      room: activeRoom,
       styleController,
     }))
   const camera = cameraController.get()
@@ -448,6 +565,7 @@ function updateIntro() {
 
 import.meta.hot?.dispose(() => {
   cancelAnimationFrame(frameId)
+  multiplayer.close()
 })
 
 const strobeLights = createStrobeLights()
@@ -472,7 +590,8 @@ const { addLocalReflection, addSunLitTriangle } = createSceneLighting({
   getTree: () => outsideTree,
   strobeReflection: (point, normal) => strobeController.reflection(point, normal),
 })
-const players = createPlayers(150, outsideTree, occupiedSeats)
+const npcPlayers = createPlayers(0, outsideTree, occupiedSeats)
+const renderPlayers: Player[] = [...npcPlayers]
 const characterRenderSystem = createCharacterRenderSystem({
   boxInstanceBuffer: characterBoxInstanceBuffer,
   boxInstanceSize: characterBoxInstanceSize,
@@ -485,7 +604,7 @@ const characterRenderSystem = createCharacterRenderSystem({
   idleClipIndex: () => idleClipIndex,
   light: addLocalReflection,
   localCharacter,
-  players,
+  players: renderPlayers,
   styleController,
   vertexSize,
 })

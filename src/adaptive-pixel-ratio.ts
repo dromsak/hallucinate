@@ -29,8 +29,8 @@ export function createAdaptivePixelRatio() {
       const next = frameTime > slowFrame
         ? ratio - step
         : frameTime < fastFrame
-          ? ratio + step
-          : ratio
+        ? ratio + step
+        : ratio
       const direction = Math.sign(next - ratio)
 
       if (direction === 0) {
@@ -39,7 +39,7 @@ export function createAdaptivePixelRatio() {
 
       ratio = clamp(next, min, max)
       changeAt = stamp + (direction > 0 ? 2000 : 250)
-      console.log('[club] pixel ratio', ratio.toFixed(2), 'fps', Math.round(1 / frameTime))
+      // console.log('[club] pixel ratio', ratio.toFixed(2), 'fps', Math.round(1 / frameTime))
 
       return ratio
     },

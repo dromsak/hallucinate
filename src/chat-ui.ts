@@ -5,56 +5,110 @@ import type { Vec3 } from './types.ts'
 export function createChatUi(
   form: HTMLFormElement,
   input: HTMLInputElement,
-  bubble: HTMLDivElement,
+  bubbleRoot: HTMLDivElement,
   position: Vec3,
 ) {
-  let hideAt = 0
-  let overlayX = Number.NaN
-  let overlayY = Number.NaN
+  let formX = Number.NaN
+  let formY = Number.NaN
   const anchor: Vec3 = [0, 0, 0]
   const point: ProjectedPoint = { x: 0, y: 0 }
+  const bubbles = new Map<number, {
+    element: HTMLDivElement
+    position: Vec3
+    hideAt: number
+    x: number
+    y: number
+  }>()
 
   return {
     open() {
       input.value = ''
       form.dataset.open = 'true'
-      bubble.dataset.open = 'false'
       input.focus()
     },
     submit() {
       const text = input.value.trim()
 
-      if (text) {
-        bubble.textContent = text
-        bubble.dataset.open = 'true'
-        hideAt = performance.now() + 5000
-      }
-
       form.dataset.open = 'false'
       input.blur()
+
+      return text
+    },
+    show(id: number, text: string, bubblePosition: Vec3, stamp: number) {
+      const bubble = bubbles.get(id) ?? createBubble(bubbleRoot, bubblePosition)
+
+      bubble.element.textContent = text
+      bubble.position = bubblePosition
+      bubble.hideAt = stamp + 4000
+      bubbles.set(id, bubble)
+    },
+    remove(id: number) {
+      const bubble = bubbles.get(id)
+
+      if (bubble) {
+        bubble.element.remove()
+        bubbles.delete(id)
+      }
+    },
+    clear() {
+      for (const bubble of bubbles.values()) {
+        bubble.element.remove()
+      }
+
+      bubbles.clear()
     },
     update(projector: WallProjector, stamp: number) {
-      if (form.dataset.open !== 'true' && bubble.dataset.open !== 'true') {
-        return
+      if (form.dataset.open === 'true') {
+        anchor[0] = position[0]
+        anchor[1] = position[1] + 1.05
+        anchor[2] = position[2]
+        projectWallPointInto(anchor, projector, point)
+        const x = Math.round(point.x)
+        const y = Math.round(point.y - 68)
+
+        if (x !== formX || y !== formY) {
+          formX = x
+          formY = y
+          form.style.transform = `translate(-50%, -100%) translate(${x}px, ${y}px)`
+        }
       }
 
-      anchor[0] = position[0]
-      anchor[1] = position[1] + 1.05
-      anchor[2] = position[2]
-      projectWallPointInto(anchor, projector, point)
-      const x = Math.round(point.x)
-      const y = Math.round(point.y - 68)
+      for (const [id, bubble] of bubbles) {
+        if (stamp > bubble.hideAt) {
+          bubble.element.remove()
+          bubbles.delete(id)
+          continue
+        }
 
-      if (x !== overlayX || y !== overlayY) {
-        overlayX = x
-        overlayY = y
-        form.style.transform = `translate(-50%, -100%) translate(${x}px, ${y}px)`
-        bubble.style.transform = `translate(-50%, -100%) translate(${x}px, ${y - 8}px)`
-      }
+        anchor[0] = bubble.position[0]
+        anchor[1] = bubble.position[1] + 1.05
+        anchor[2] = bubble.position[2]
+        projectWallPointInto(anchor, projector, point)
+        const x = Math.round(point.x)
+        const y = Math.round(point.y - 76)
 
-      if (bubble.dataset.open === 'true' && stamp > hideAt) {
-        bubble.dataset.open = 'false'
+        if (x !== bubble.x || y !== bubble.y) {
+          bubble.x = x
+          bubble.y = y
+          bubble.element.style.transform = `translate(-50%, -100%) translate(${x}px, ${y}px)`
+        }
       }
     },
   }
+}
+
+function createBubble(root: HTMLDivElement, position: Vec3) {
+  const element = document.createElement('div')
+  const bubble = {
+    element,
+    position,
+    hideAt: 0,
+    x: Number.NaN,
+    y: Number.NaN,
+  }
+
+  element.className = 'chat-bubble'
+  root.append(element)
+
+  return bubble
 }
