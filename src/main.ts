@@ -1,36 +1,15 @@
 import './style.css'
-import assimpjs from 'assimpjs'
-import { loadAssimpScene } from './assimp-loader.ts'
 import { createCameraController } from './camera-controller.ts'
+import { loadCharacterAssets } from './character-assets.ts'
 import {
-  characterBones,
   characterFloor,
-  characterGroundJoints,
-  characterScale,
   hairPalette,
   jewelPalette,
-  shoe,
-  skin,
 } from './character-data.ts'
-import {
-  addCharacterBox,
-  addCharacterQuad,
-  addLitTriangle,
-  flattenVertices,
-  hairPoint,
-  triangleAreaSquared,
-} from './character-geometry.ts'
-import { createHairMeshes, createHairRenderMeshes, updateHairInstances } from './character-hair.ts'
-import { characterParts, characterPoseJoints, characterPoseJointSet } from './character-parts.ts'
-import {
-  createCharacterClip,
-  createRigNodes,
-  sampleBasePose,
-  sampleCharacterPose,
-  validateCharacterRig,
-} from './character-rig.ts'
-import { applyBottomStyle, applyTopStyle, resolvePlayerStyle } from './character-style.ts'
-import { characterInView, characterView } from './character-visibility.ts'
+import { buildCharacterDrawData } from './character-draw.ts'
+import { triangleAreaSquared } from './character-geometry.ts'
+import { updateHairInstances } from './character-hair.ts'
+import { createCharacterStyleController } from './character-style.ts'
 import { createChatUi } from './chat-ui.ts'
 import { readClubState, writeClubState } from './club-state.ts'
 import { electricNavy, outsideMotif } from './constants.ts'
@@ -44,7 +23,6 @@ import {
   clamp,
   cross,
   dot,
-  mix,
   normalize,
   normalizeIndex,
   scale,
@@ -53,18 +31,7 @@ import {
   subtract,
 } from './math.ts'
 import { createPlayers, updatePlayers } from './player-system.ts'
-import {
-  backDoor,
-  bartenderBar,
-  bartenderStools,
-  djBooth,
-  djSpeakers,
-  landscapeBounds,
-  outsideBounds,
-  outsideDjBooth,
-  outsideDjSpeakers,
-  roomBounds,
-} from './scene-data.ts'
+import { outsideBounds } from './scene-data.ts'
 import {
   isOutside,
   usesSkyBackground,
@@ -84,23 +51,14 @@ import {
   vertex,
 } from './shaders.ts'
 import { createStrobeLights, strobeLightAmount, strobeRandom, strobeTarget } from './strobe-object.ts'
-import { addTreeShadowReceiver, createTreeMeshes, treeCollision, uploadTreeShadowMap } from './tree-object.ts'
+import { loadOutsideTree } from './tree-world.ts'
 import type {
-  BottomMode,
-  CharacterPart,
   CharacterRig,
   CircleBounds,
   ClubGlobal,
-  HairInstance,
   HairMesh,
   HairRenderMesh,
-  PlayerStyle,
-  PoseBlendCache,
-  ResolvedPlayerStyle,
-  SampledPose,
   StrobeReflectionLight,
-  TopMode,
-  TreeMesh,
   Vec3,
   Vertex,
 } from './types.ts'
@@ -141,13 +99,14 @@ let characterHairIndex = 0
 let characterHairColorIndex = 0
 let characterHairMeshes: HairMesh[] = []
 let hairRenderMeshes: HairRenderMesh[] = []
-let hairInstances: HairInstance[] = []
 let characterRigLoad: Promise<CharacterRig> | undefined
+let characterAssetsLoaded = false
 let frameId = 0
 const saveKey = 'club-state'
 const keys = new Set<string>()
 const localCharacter = createLocalCharacter(keys)
 const characterPosition = localCharacter.position
+const styleController = createCharacterStyleController()
 const chatUi = createChatUi(chatForm, chatInput, chatBubble, canvas, characterPosition)
 const djVideoUi = createDjVideoUi(djVideo, canvas, characterPosition)
 const cameraController = createCameraController(canvas, characterPosition)
@@ -382,6 +341,11 @@ gl.bindVertexArray(null)
 
 gl.enable(gl.DEPTH_TEST)
 gl.clearColor(0.01, 0.01, 0.014, 1.0)
+
+restoreState()
+djVideoUi.setZoneFromPosition()
+djVideoUi.load()
+
 bindKeyboardInput({
   activeInput: chatInput,
   keys,
@@ -548,7 +512,7 @@ loadCharacterRigOnce()
   })
 
 function loadCharacterRigOnce() {
-  characterRigLoad ??= clubGlobal.clubCharacterRigLoad ??= loadCharacterRig()
+  characterRigLoad ??= loadCharacterRig()
 
   return characterRigLoad
 }
@@ -678,15 +642,6 @@ function drawStrobes(camera: ReturnType<typeof getCamera>, width: number, height
   gl.drawArraysInstanced(gl.TRIANGLES, 0, strobeGeometry.count, strobeInstanceCount)
 }
 
-let shirtColorIndex = 1
-let topStyleIndex = 1
-let topMode: TopMode = 'shirt'
-let pantsColorIndex = 0
-let bottomStyleIndex = 0
-let bottomMode: BottomMode = 'pants'
-restoreState()
-djVideoUi.setZoneFromPosition()
-djVideoUi.load()
 const wallLightZ = [-2, -6, -10, -14, -18, -22]
 const backLightX = [-4.5, 0, 4.5]
 const strobeLights = createStrobeLights()
@@ -695,73 +650,24 @@ let lightFrame = 0
 let strobeReflectionFrame = -1
 let strobeReflectionLights: StrobeReflectionLight[] = []
 async function loadCharacterRig(): Promise<CharacterRig> {
-  const ajs = await assimpjs({
-    locateFile(path) {
-      return path.endsWith('.wasm') ? '/assimpjs.wasm' : path
-    },
-  })
-  const [stand, run, manHair, womanHair] = await Promise.all([
-    loadAssimpScene(ajs, '/stand.fbx', 'stand.fbx'),
-    loadAssimpScene(ajs, '/run.fbx', 'run.fbx'),
-    loadAssimpScene(ajs, '/man-hair.fbx', 'man-hair.fbx'),
-    loadAssimpScene(ajs, '/woman-hair.fbx', 'woman-hair.fbx'),
-  ])
-  const rig = {
-    root: stand.rootnode,
-    nodes: createRigNodes(stand.rootnode),
-    clips: {
-      stand: createCharacterClip(stand, 'stand.fbx'),
-      run: createCharacterClip(run, 'run.fbx'),
-    },
-  }
+  const assets = await loadCharacterAssets(gl, characterHairIndex)
 
-  validateCharacterRig(rig.root, characterBones)
-  characterHairMeshes = [...createHairMeshes(manHair, 'man'), ...createHairMeshes(womanHair, 'woman')]
-  hairRenderMeshes = createHairRenderMeshes(gl, characterHairMeshes)
-  characterHairIndex = normalizeIndex(characterHairIndex, characterHairMeshes.length + 1)
+  characterHairMeshes = assets.hairMeshes
+  hairRenderMeshes = assets.hairRenderMeshes
+  characterHairIndex = assets.hairIndex
+  characterAssetsLoaded = true
   setCharacterHair()
   logCurrentHair()
-  loadOutsideTree().catch((error: unknown) => {
-    console.error(error)
-  })
+  loadOutsideTree(gl, treeShadowMap, vertices, outsideTree, addSunLitTriangle)
+    .then(nextTree => {
+      outsideTree = nextTree
+      refreshRoomBuffer()
+    })
+    .catch((error: unknown) => {
+      console.error(error)
+    })
 
-  return rig
-}
-
-async function loadOutsideTree() {
-  const ajs = await assimpjs({
-    locateFile(path) {
-      return path.endsWith('.wasm') ? '/assimpjs.wasm' : path
-    },
-  })
-  const trees = await loadAssimpScene(ajs, '/trees.fbx', 'trees.fbx')
-
-  addTreeToWorld(createTreeMeshes(trees))
-}
-
-function addTreeToWorld(meshes: TreeMesh[]) {
-  const position: Vec3 = [outsideTree.x, characterFloor + 3.7, outsideTree.z]
-
-  outsideTree = treeCollision(meshes, position)
-
-  if (outsideMotif !== 'night') {
-    uploadTreeShadowMap(gl, treeShadowMap, meshes, position, characterFloor, landscapeBounds, roomBounds.front)
-    addTreeShadowReceiver(vertices, characterFloor, landscapeBounds)
-  }
-
-  for (const mesh of meshes) {
-    for (const face of mesh.faces) {
-      const a = add(position, mesh.points[face[0]!]!)
-      const b = add(position, mesh.points[face[1]!]!)
-      const c = add(position, mesh.points[face[2]!]!)
-
-      if (triangleAreaSquared(a, b, c) > 0.00000001) {
-        addSunLitTriangle(vertices, a, b, c, mesh.color)
-      }
-    }
-  }
-
-  refreshRoomBuffer()
+  return assets.rig
 }
 
 function updateCharacterMesh(time: number) {
@@ -769,39 +675,37 @@ function updateCharacterMesh(time: number) {
     return 0
   }
 
-  const target: Vertex[] = []
-  characterBoxInstances = []
-  hairInstances = []
-  addRenderedCharacter(target, {
-    position: characterPosition,
-    turn: localCharacter.turn,
-    motionBlend: localCharacter.motionBlend,
-    style: {
-      topStyleIndex,
-      bottomStyleIndex,
-      hairIndex: characterHairIndex,
-      hairColorIndex: characterHairColorIndex,
+  const data = buildCharacterDrawData({
+    cameraPosition: cameraController.position,
+    cameraTarget: cameraController.target,
+    character: {
+      position: characterPosition,
+      turn: localCharacter.turn,
+      motionBlend: localCharacter.motionBlend,
+      style: {
+        topStyleIndex: styleController.topStyleIndex,
+        bottomStyleIndex: styleController.bottomStyleIndex,
+        hairIndex: characterHairIndex,
+        hairColorIndex: characterHairColorIndex,
+      },
     },
-  }, time, true)
+    hairMeshes: characterHairMeshes,
+    height: canvas.height,
+    light: addLocalReflection,
+    players,
+    rig: characterRig,
+    time,
+    width: canvas.width,
+  })
 
-  const view = characterView(cameraController.position, cameraController.target)
-  const npcPose = sampleBasePose(characterRig, time, characterPoseJointSet)
-  const npcBlendCache: PoseBlendCache = new Map()
-
-  for (const player of players) {
-    if (characterInView(player, view, canvas.width, canvas.height)) {
-      addRenderedCharacter(target, player, time, false, npcPose, npcBlendCache)
-    }
-  }
-
-  updateHairInstances(gl, hairRenderMeshes, hairInstances)
+  characterBoxInstances = data.boxInstances
+  updateHairInstances(gl, hairRenderMeshes, data.hairInstances)
   updateCharacterBoxInstances()
-  const data = flattenVertices(target)
 
   gl.bindBuffer(gl.ARRAY_BUFFER, characterBuffer)
-  gl.bufferData(gl.ARRAY_BUFFER, data, gl.DYNAMIC_DRAW)
+  gl.bufferData(gl.ARRAY_BUFFER, data.vertices, gl.DYNAMIC_DRAW)
 
-  return data.length / vertexSize
+  return data.vertices.length / vertexSize
 }
 
 function updateCharacterBoxInstances() {
@@ -842,201 +746,14 @@ function drawNpcHair(camera: ReturnType<typeof getCamera>, width: number, height
   gl.bindVertexArray(null)
 }
 
-function addRenderedCharacter(
+function addSunLitTriangle(
   target: Vertex[],
-  player: {
-    position: Vec3
-    turn: number
-    motionBlend: number
-    style: PlayerStyle
-    resolvedStyle?: ResolvedPlayerStyle
-  },
-  time: number,
-  detailedHair: boolean,
-  basePose?: SampledPose,
-  blendCache?: PoseBlendCache,
+  a: Vec3,
+  b: Vec3,
+  c: Vec3,
+  color: Vec3,
+  tree = outsideTree,
 ) {
-  const pose = sampleCharacterPose(characterRig!, time, player, characterPoseJoints, characterPoseJointSet,
-    characterGroundJoints, characterScale, basePose, blendCache)
-  const style = player.resolvedStyle ?? resolvePlayerStyle(player.style)
-  const localReflection = detailedHair
-
-  for (const part of characterParts) {
-    if (style.bottomMode === 'pants' || !part.bottom) {
-      addCharacterPart(target, pose, part, player, style, localReflection)
-    }
-  }
-
-  if (style.bottomMode === 'skirt') {
-    addCharacterSkirt(target, pose, player, style, localReflection)
-  }
-
-  if (style.topMode === 'chest') {
-    addCharacterChest(target, pose, player, localReflection)
-  }
-
-  const hair = playerHair(player.style.hairIndex)
-
-  if (hair && detailedHair) {
-    addCharacterHair(target, pose, hair, player, style.hairColor)
-  }
-  else if (hair && characterHairMeshes.length > 0) {
-    addNpcHairInstance(pose, hair, player, style.hairColor)
-  }
-}
-
-function addNpcHairInstance(pose: Map<string, Vec3>, hair: HairMesh, player: { turn: number }, color: Vec3) {
-  const head = pose.get('mixamorig:Head')!
-  const top = pose.get('mixamorig:HeadTop_End')!
-  const up = normalize(subtract(top, head))
-  const center = add(head, scale(up, -0.035))
-  hairInstances.push({
-    meshIndex: characterHairMeshes.indexOf(hair),
-    center,
-    side: [Math.cos(player.turn), 0, -Math.sin(player.turn)],
-    up,
-    forward: [Math.sin(player.turn), 0, Math.cos(player.turn)],
-    color,
-  })
-}
-
-function addCharacterPart(
-  target: Vertex[],
-  pose: Map<string, Vec3>,
-  part: CharacterPart,
-  player: { turn: number },
-  style: ResolvedPlayerStyle,
-  localReflection: boolean,
-) {
-  const from = pose.get(part.from)!
-  const to = pose.get(part.to)!
-  const start = part.start ?? 0
-  const end = part.end ?? 1
-  const axis = subtract(to, from)
-  let a = add(from, scale(axis, start))
-  let b = add(from, scale(axis, end))
-
-  if (part.armOffset) {
-    const center = scale(add(a, b), 0.5)
-    const torso = pose.get('mixamorig:Spine2')!
-    const side: Vec3 = [Math.cos(player.turn), 0, -Math.sin(player.turn)]
-    const amount = Math.sign(dot(subtract(center, torso), side)) * part.armOffset
-    const offset = scale(side, amount)
-
-    a = add(a, offset)
-    b = add(b, offset)
-  }
-
-  if (part.lift) {
-    const offset: Vec3 = [0, part.lift, 0]
-
-    a = add(a, offset)
-    b = add(b, offset)
-  }
-
-  addCharacterBox(target, characterBoxInstances, a, b, part.width, part.depth, characterPartColor(part, style),
-    part.glow ?? 0.02, player.turn, localReflection, addLocalReflection)
-}
-
-function characterPartColor(part: CharacterPart, style: ResolvedPlayerStyle) {
-  if (part.top === 'torso') {
-    return style.topMode === 'shirt' || style.topMode === 'sleeveless' ? style.shirtLight : skin
-  }
-
-  if (part.top === 'sleeve') {
-    return style.topMode === 'shirt' ? style.shirt : skin
-  }
-
-  if (part.bottom) {
-    return style.pants
-  }
-
-  if (part.color === shoe) {
-    return style.shoe
-  }
-
-  return part.color
-}
-
-function addCharacterChest(
-  target: Vertex[],
-  pose: Map<string, Vec3>,
-  player: { turn: number },
-  localReflection: boolean,
-) {
-  const spine = pose.get('mixamorig:Spine2')!
-  const neck = pose.get('mixamorig:Neck')!
-  const center = add(spine, scale(subtract(neck, spine), 0.32))
-  const side: Vec3 = [Math.cos(player.turn), 0, -Math.sin(player.turn)]
-  const forward: Vec3 = [Math.sin(player.turn), 0, Math.cos(player.turn)]
-
-  for (const offset of [-0.055, 0.055]) {
-    const a = add(add(center, scale(side, offset)), scale(forward, 0.06))
-    const b = add(add(center, scale(side, offset)), scale(forward, 0.13))
-
-    addCharacterBox(target, characterBoxInstances, a, b, 0.065, 0.06, skin, 0.02, player.turn, localReflection,
-      addLocalReflection)
-  }
-}
-
-function addCharacterSkirt(
-  target: Vertex[],
-  pose: Map<string, Vec3>,
-  player: { turn: number },
-  style: ResolvedPlayerStyle,
-  localReflection: boolean,
-) {
-  const hips = pose.get('mixamorig:Hips')!
-  const leftUp = pose.get('mixamorig:LeftUpLeg')!
-  const rightUp = pose.get('mixamorig:RightUpLeg')!
-  const leftLeg = pose.get('mixamorig:LeftLeg')!
-  const rightLeg = pose.get('mixamorig:RightLeg')!
-  const topCenter = scale(add(add(hips, leftUp), rightUp), 1 / 3)
-  const bottomCenter = scale(add(leftLeg, rightLeg), 0.5)
-  const side: Vec3 = [Math.cos(player.turn), 0, -Math.sin(player.turn)]
-  const forward: Vec3 = [Math.sin(player.turn), 0, Math.cos(player.turn)]
-  const topWidth = 0.09
-  const bottomWidth = 0.15
-  const topDepth = 0.11
-  const bottomDepth = 0.14
-  const a = add(add(topCenter, scale(side, -topWidth)), scale(forward, -topDepth))
-  const b = add(add(topCenter, scale(side, topWidth)), scale(forward, -topDepth))
-  const c = add(add(topCenter, scale(side, topWidth)), scale(forward, topDepth))
-  const d = add(add(topCenter, scale(side, -topWidth)), scale(forward, topDepth))
-  const e = add(add(bottomCenter, scale(side, -bottomWidth)), scale(forward, -bottomDepth))
-  const f = add(add(bottomCenter, scale(side, bottomWidth)), scale(forward, -bottomDepth))
-  const g = add(add(bottomCenter, scale(side, bottomWidth)), scale(forward, bottomDepth))
-  const h = add(add(bottomCenter, scale(side, -bottomWidth)), scale(forward, bottomDepth))
-
-  addCharacterQuad(target, a, b, f, e, style.pants, 0.02, localReflection, addLocalReflection)
-  addCharacterQuad(target, b, c, g, f, scale(style.pants, 0.88), 0.02, localReflection, addLocalReflection)
-  addCharacterQuad(target, c, d, h, g, scale(style.pants, 0.78), 0.02, localReflection, addLocalReflection)
-  addCharacterQuad(target, d, a, e, h, scale(style.pants, 0.88), 0.02, localReflection, addLocalReflection)
-  addCharacterQuad(target, e, f, g, h, scale(style.pants, 0.68), 0.02, localReflection, addLocalReflection)
-}
-
-function addCharacterHair(target: Vertex[], pose: Map<string, Vec3>, mesh: HairMesh, player: { turn: number },
-  color: Vec3)
-{
-  const head = pose.get('mixamorig:Head')!
-  const top = pose.get('mixamorig:HeadTop_End')!
-  const up = normalize(subtract(top, head))
-  const side: Vec3 = [Math.cos(player.turn), 0, -Math.sin(player.turn)]
-  const forward: Vec3 = [Math.sin(player.turn), 0, Math.cos(player.turn)]
-  const center = add(head, scale(up, -0.035))
-
-  for (const face of mesh.faces) {
-    const a = hairPoint(center, side, up, forward, mesh.points[face[0]!]!)
-    const b = hairPoint(center, side, up, forward, mesh.points[face[1]!]!)
-    const c = hairPoint(center, side, up, forward, mesh.points[face[2]!]!)
-
-    if (triangleAreaSquared(a, b, c) > 0.00000001) {
-      addLitTriangle(target, a, b, c, color, 0, addLocalReflection)
-    }
-  }
-}
-
-function addSunLitTriangle(target: Vertex[], a: Vec3, b: Vec3, c: Vec3, color: Vec3) {
   const center = scale(add(add(a, b), c), 1 / 3)
   const normal = normalize(cross(subtract(c, a), subtract(b, a)))
   const sun = normalize(subtract([10.5, 6.8, outsideBounds.front], center))
@@ -1044,9 +761,9 @@ function addSunLitTriangle(target: Vertex[], a: Vec3, b: Vec3, c: Vec3, color: V
   const lift = clamp((normal[1] + 1) * 0.5, 0, 1)
   const night = outsideMotif === 'night'
   const treeLights: Vec3[] = [
-    [outsideTree.x - outsideTree.radius * 2.5, characterFloor - 0.35, outsideTree.z + outsideTree.radius * 0.85],
-    [outsideTree.x + outsideTree.radius * 2.5, characterFloor - 0.35, outsideTree.z + outsideTree.radius * 0.85],
-    [outsideTree.x, characterFloor - 0.35, outsideTree.z - outsideTree.radius * 2.5],
+    [tree.x - tree.radius * 2.5, characterFloor - 0.35, tree.z + tree.radius * 0.85],
+    [tree.x + tree.radius * 2.5, characterFloor - 0.35, tree.z + tree.radius * 0.85],
+    [tree.x, characterFloor - 0.35, tree.z - tree.radius * 2.5],
   ]
   let uplight = 0
 
@@ -1175,18 +892,22 @@ function restoreState() {
     characterHairIndex = state.characterHairIndex ?? characterHairIndex
     characterHairColorIndex = normalizeIndex(state.characterHairColorIndex ?? characterHairColorIndex,
       hairPalette.length)
-    topStyleIndex = normalizeIndex(state.topStyleIndex ?? state.shirtColorIndex ?? topStyleIndex,
-      jewelPalette.length * 2 + 2)
-    bottomStyleIndex = normalizeIndex(state.bottomStyleIndex ?? state.pantsColorIndex ?? bottomStyleIndex,
-      jewelPalette.length * 2)
+    styleController.topStyleIndex = normalizeIndex(state.topStyleIndex ?? state.shirtColorIndex
+      ?? styleController.topStyleIndex, jewelPalette.length * 2 + 2)
+    styleController.bottomStyleIndex = normalizeIndex(state.bottomStyleIndex ?? state.pantsColorIndex
+      ?? styleController.bottomStyleIndex, jewelPalette.length * 2)
     djVideoUi.times.inside = state.videoTimes?.inside ?? djVideoUi.times.inside
     djVideoUi.times.outside = state.videoTimes?.outside ?? djVideoUi.times.outside
-    setTopStyle()
-    setBottomStyle()
+    styleController.setTopStyle()
+    styleController.setBottomStyle()
   }
 }
 
 function saveState() {
+  if (!characterAssetsLoaded) {
+    return
+  }
+
   djVideoUi.syncCurrentTime()
 
   writeClubState(saveKey, {
@@ -1197,10 +918,10 @@ function saveState() {
     velocityY: localCharacter.velocityY,
     characterHairIndex,
     characterHairColorIndex,
-    shirtColorIndex,
-    topStyleIndex,
-    pantsColorIndex,
-    bottomStyleIndex,
+    shirtColorIndex: styleController.shirtColorIndex,
+    topStyleIndex: styleController.topStyleIndex,
+    pantsColorIndex: styleController.pantsColorIndex,
+    bottomStyleIndex: styleController.bottomStyleIndex,
     videoTimes: djVideoUi.times,
   })
 }
@@ -1250,33 +971,9 @@ function cycleHairColor(direction: number) {
 }
 
 function cycleShirt(direction: number) {
-  topStyleIndex = normalizeIndex(topStyleIndex + direction, jewelPalette.length * 2 + 2)
-  setTopStyle()
-}
-
-function setTopStyle() {
-  const style = applyTopStyle(topStyleIndex)
-
-  topMode = style.mode
-  shirtColorIndex = style.colorIndex
+  styleController.cycleShirt(direction)
 }
 
 function cyclePants(direction: number) {
-  bottomStyleIndex = normalizeIndex(bottomStyleIndex + direction, jewelPalette.length * 2)
-  setBottomStyle()
-}
-
-function setBottomStyle() {
-  const style = applyBottomStyle(bottomStyleIndex)
-
-  bottomMode = style.mode
-  pantsColorIndex = style.colorIndex
-}
-
-function playerHair(index: number) {
-  if (index === 0 || characterHairMeshes.length === 0) {
-    return undefined
-  }
-
-  return characterHairMeshes[normalizeIndex(index - 1, characterHairMeshes.length)]!
+  styleController.cyclePants(direction)
 }

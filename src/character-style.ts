@@ -2,6 +2,62 @@ import { hairPalette, jewelPalette, pants, shirt, shirtLight, shoe } from './cha
 import { normalizeIndex, scale, setVec3 } from './math.ts'
 import type { BottomMode, PlayerStyle, ResolvedPlayerStyle, TopMode } from './types.ts'
 
+export function createCharacterStyleController() {
+  let shirtColorIndex = 1
+  let topStyleIndex = 1
+  let topMode: TopMode = 'shirt'
+  let pantsColorIndex = 0
+  let bottomStyleIndex = 0
+  let bottomMode: BottomMode = 'pants'
+
+  return {
+    get shirtColorIndex() {
+      return shirtColorIndex
+    },
+    get topStyleIndex() {
+      return topStyleIndex
+    },
+    set topStyleIndex(value: number) {
+      topStyleIndex = value
+    },
+    get topMode() {
+      return topMode
+    },
+    get pantsColorIndex() {
+      return pantsColorIndex
+    },
+    get bottomStyleIndex() {
+      return bottomStyleIndex
+    },
+    set bottomStyleIndex(value: number) {
+      bottomStyleIndex = value
+    },
+    get bottomMode() {
+      return bottomMode
+    },
+    cycleShirt(direction: number) {
+      topStyleIndex = normalizeIndex(topStyleIndex + direction, jewelPalette.length * 2 + 2)
+      this.setTopStyle()
+    },
+    setTopStyle() {
+      const style = applyTopStyle(topStyleIndex)
+
+      topMode = style.mode
+      shirtColorIndex = style.colorIndex
+    },
+    cyclePants(direction: number) {
+      bottomStyleIndex = normalizeIndex(bottomStyleIndex + direction, jewelPalette.length * 2)
+      this.setBottomStyle()
+    },
+    setBottomStyle() {
+      const style = applyBottomStyle(bottomStyleIndex)
+
+      bottomMode = style.mode
+      pantsColorIndex = style.colorIndex
+    },
+  }
+}
+
 export function applyTopStyle(topStyleIndex: number) {
   const style = topStyleData(topStyleIndex)
 
