@@ -38,6 +38,7 @@ export function createCharacterRenderSystem(options: {
   const boxInstanceCache: NumberBufferCache = { data: new Float32Array(0) }
   const vertexUploadCache: NumberBufferCache = { data: new Float32Array(0) }
   const drawCache: CharacterDrawCache = {
+    basePose: undefined,
     basePoses: new Map(),
     boxInstances: [],
     hairInstances: [],

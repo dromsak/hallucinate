@@ -53,6 +53,7 @@ type TurnBasis = {
 }
 
 export type CharacterDrawCache = {
+  basePose?: SampledPose
   basePoses: Map<number, SampledPose>
   boxInstances: number[]
   hairInstances: number[]
@@ -105,7 +106,12 @@ export function buildCharacterDrawData(options: BuildOptions) {
   const basePoses = cache?.basePoses ?? new Map()
   const usedBasePoseKeys = cache?.usedBasePoseKeys ?? new Set<number>()
   const usedNpcBlendKeys = cache?.usedNpcBlendKeys ?? new Set<number>()
-  const basePose = sampleBasePose(options.rig, options.time, characterPoseJoints, characterPoseJointSet)
+  const basePose = sampleBasePose(options.rig, options.time, characterPoseJoints, characterPoseJointSet,
+    cache?.basePose)
+
+  if (cache) {
+    cache.basePose = basePose
+  }
   let poseIndex = 0
 
   resetVertexWriter(vertices)

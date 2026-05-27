@@ -177,20 +177,21 @@ export function sampleBasePose(
   time: number,
   characterPoseJoints: string[],
   characterPoseJointSet: Set<string>,
+  target?: SampledPose,
 ): SampledPose {
   return {
-    stand: sampleClipPose(rig, rig.clips.stand, time, characterPoseJoints, characterPoseJointSet),
-    run: sampleClipPose(rig, rig.clips.run, time, characterPoseJoints, characterPoseJointSet),
+    stand: sampleClipPose(rig, rig.clips.stand, time, characterPoseJoints, characterPoseJointSet, target?.stand),
+    run: sampleClipPose(rig, rig.clips.run, time, characterPoseJoints, characterPoseJointSet, target?.run),
   }
 }
 
 export function sampleClipPose(rig: CharacterRig, clip: CharacterClip, time: number,
-  characterPoseJoints: string[], characterPoseJointSet: Set<string>)
+  characterPoseJoints: string[], characterPoseJointSet: Set<string>, target?: Vec3[])
 {
   const tick = (time * clip.ticksPerSecond) % clip.duration
   const plan = getPoseSamplePlan(rig, characterPoseJoints, characterPoseJointSet)
   const channels = getPoseSampleChannels(rig, clip, plan)
-  const pose = new Array<Vec3>(characterPoseJoints.length)
+  const pose = target ?? new Array<Vec3>(characterPoseJoints.length)
 
   for (const i of plan.indices) {
     const node = rig.nodes[i]!
@@ -203,11 +204,24 @@ export function sampleClipPose(rig: CharacterRig, clip: CharacterClip, time: num
     plan.world[i] = matrix
 
     if (poseSlot >= 0) {
-      pose[poseSlot] = transformOrigin(matrix)
+      setTransformOrigin(matrix, pose, poseSlot)
     }
   }
 
   return pose
+}
+
+function setTransformOrigin(matrix: Mat4, target: Vec3[], index: number) {
+  const point = target[index]
+
+  if (point) {
+    point[0] = matrix[3]
+    point[1] = matrix[7]
+    point[2] = matrix[11]
+  }
+  else {
+    target[index] = [matrix[3], matrix[7], matrix[11]]
+  }
 }
 
 function sampleChannelTransform(node: RigNode, channel: AssimpChannel, tick: number, target: Mat4) {
