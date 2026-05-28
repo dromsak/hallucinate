@@ -15,6 +15,7 @@ export function restoreClubState(options: {
   characterPosition: Vec3
   djVideoUi: ReturnType<typeof createDjVideoUi>
   hairController: ReturnType<typeof createCharacterHairController>
+  setAlternativeInput: (value: boolean) => void
   idleClipIndex: {
     set(value: number): void
   }
@@ -51,6 +52,7 @@ export function restoreClubState(options: {
     options.djVideoUi.times.outside = state.videoTimes?.outside ?? options.djVideoUi.times.outside
     options.djVideoUi.trackIndexes.inside = state.videoTrackIndexes?.inside ?? options.djVideoUi.trackIndexes.inside
     options.djVideoUi.trackIndexes.outside = state.videoTrackIndexes?.outside ?? options.djVideoUi.trackIndexes.outside
+    options.setAlternativeInput(state.alternativeInput ?? true)
     options.styleController.setTopStyle()
     options.styleController.setBottomStyle()
   }
@@ -65,6 +67,7 @@ export function saveClubState(options: {
   characterPosition: Vec3
   djVideoUi: ReturnType<typeof createDjVideoUi>
   hairController: ReturnType<typeof createCharacterHairController>
+  alternativeInput: boolean
   idleClipIndex: number
   key: string
   localCharacter: ReturnType<typeof createLocalCharacter>
@@ -91,6 +94,7 @@ export function saveClubState(options: {
     topStyleIndex: options.styleController.topStyleIndex,
     pantsColorIndex: options.styleController.pantsColorIndex,
     bottomStyleIndex: options.styleController.bottomStyleIndex,
+    alternativeInput: options.alternativeInput,
     room: options.room,
     videoTimes: options.djVideoUi.times,
     videoTrackIndexes: options.djVideoUi.trackIndexes,

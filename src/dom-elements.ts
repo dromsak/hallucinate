@@ -42,7 +42,7 @@ export function getDomElements() {
   introLogoTitle.textContent = 'hallucinate'
   introLogoSubtext.textContent = 'Massively Multiplayer Online Rave'
   introStart.type = 'button'
-  introStart.textContent = 'start'
+  introStart.textContent = 'enter'
   introProgress.textContent = '0%'
 
   chatForm.append(chatInput)

@@ -13,7 +13,7 @@ import { createDjVideoUi } from './dj-video-ui.ts'
 import { getDomElements } from './dom-elements.ts'
 import { createHelpUi } from './help-ui.ts'
 import { addRoom, addRoomSmoke, addWallStrips } from './environment-object.ts'
-import { bindKeyboardInput } from './input.ts'
+import { bindKeyboardInput, setAlternativeInput } from './input.ts'
 import { createLocalCharacter } from './local-character.ts'
 import { lengthSq } from './math.ts'
 import { createMultiplayer, updateRemotePlayers } from './multiplayer.ts'
@@ -95,6 +95,7 @@ const keys = new Set<string>()
 const occupiedSeats = new Set<string>()
 const remoteSeats = new Set<string>()
 let idleClipIndex = 0
+let alternativeInput = true
 const localCharacter = createLocalCharacter(keys)
 const characterPosition = localCharacter.position
 const hairController = createCharacterHairController()
@@ -113,6 +114,12 @@ const idleClipState = {
     idleClipIndex = value
   },
 }
+function useAlternativeInput(value: boolean) {
+  alternativeInput = value
+  setAlternativeInput(value)
+  helpUi.setAlternativeInput(value)
+}
+useAlternativeInput(alternativeInput)
 const wallProjector = createWallProjector({ eye: [0, 0, 1], center: [0, 0, 0] }, canvas)
 const pixelRatio = createAdaptivePixelRatio()
 let outsideTree: CircleBounds = { x: 0, z: 20.5, radius: 0.75 }
@@ -122,9 +129,17 @@ let treeLoaded = false
 let introHidden = false
 let videoPlaying = false
 
-introStart.addEventListener('click', () => {
+function startIntro() {
   videoPlaying = djVideoUi.play()
   introStart.dataset.playing = String(videoPlaying)
+}
+
+introStart.addEventListener('click', startIntro)
+addEventListener('keydown', event => {
+  if (!introHidden && event.key === 'Enter') {
+    event.preventDefault()
+    startIntro()
+  }
 })
 let wasOutside = isOutside(characterPosition)
 let doorCoverReleased = true
@@ -274,6 +289,7 @@ restoreClubState({
   idleClipIndex: idleClipState,
   key: saveKey,
   localCharacter,
+  setAlternativeInput: useAlternativeInput,
   styleController,
 })
 djVideoUi.setZoneFromPosition()
@@ -349,6 +365,7 @@ multiplayer = createMultiplayer({
       characterAssetsLoaded: true,
       characterPosition,
       djVideoUi,
+      alternativeInput,
       hairController,
       idleClipIndex,
       key: saveKey,
@@ -370,6 +387,7 @@ bindKeyboardInput({
   activeInput: chatInput,
   keys,
   openChatInput: () => chatUi.open(),
+  setAlternativeInput: useAlternativeInput,
   toggleHelp: () => {
     const open = helpUi.toggle()
 
@@ -461,6 +479,7 @@ const draw = (stamp: number) => {
       characterAssetsLoaded: characterRenderSystem.assetsLoaded,
       characterPosition,
       djVideoUi,
+      alternativeInput,
       hairController,
       idleClipIndex,
       key: saveKey,

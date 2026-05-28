@@ -16,6 +16,19 @@ const leftRows: HelpKey[][] = [
   [{ keys: ['z', 'x'], label: 'bottom wear' }],
 ]
 
+const alternativeLeftRows: HelpKey[][] = [
+  [
+    { keys: ['7', '8'], label: 'hair color' },
+    { keys: ['9', '0'], label: 'skin tone' },
+  ],
+  [{ keys: ['u', 'i'], label: 'hair style' }],
+  [
+    { keys: ['j', 'k'], label: 'top wear' },
+    { keys: ['l', ';'], label: 'dance moves' },
+  ],
+  [{ keys: ['m', ','], label: 'bottom wear' }],
+]
+
 const moveRows: HelpKey[][] = [
   [{ keys: ['↑', 'i'], label: 'forward' }],
   [
@@ -25,11 +38,21 @@ const moveRows: HelpKey[][] = [
   ],
 ]
 
+const alternativeMoveRows: HelpKey[][] = [
+  [{ keys: ['↑', 'w'], label: 'forward' }],
+  [
+    { keys: ['←', 'a'], label: 'left' },
+    { keys: ['↓', 's'], label: 'back' },
+    { keys: ['→', 'd'], label: 'right' },
+  ],
+]
+
 export function createHelpUi() {
   const root = document.createElement('div')
   const left = document.createElement('div')
   const move = document.createElement('div')
   const speak = helpBox({ keys: ['space'], label: 'speak' })
+  const alternative = helpBox({ keys: ['tab'], label: 'alt inputs' })
   const toggle = helpBox({ keys: ['h'], label: 'help' })
   const video = helpNote("If the video doesn't start, press play on it")
 
@@ -38,18 +61,14 @@ export function createHelpUi() {
   left.className = 'help-cluster help-cluster-left'
   move.className = 'help-cluster help-cluster-move'
   speak.className = 'help-box help-box-speak'
+  alternative.className = 'help-box help-box-alternative'
   toggle.className = 'help-box help-box-toggle'
   video.className = 'help-box help-box-video'
 
-  for (const row of leftRows) {
-    left.append(helpRow(row))
-  }
+  renderCluster(left, leftRows)
+  renderCluster(move, moveRows)
 
-  for (const row of moveRows) {
-    move.append(helpRow(row))
-  }
-
-  root.append(left, move, speak, video, toggle)
+  root.append(left, move, speak, alternative, video, toggle)
   document.body.append(root)
 
   return {
@@ -67,7 +86,15 @@ export function createHelpUi() {
 
       return open
     },
+    setAlternativeInput(value: boolean) {
+      renderCluster(left, value ? alternativeLeftRows : leftRows)
+      renderCluster(move, value ? alternativeMoveRows : moveRows)
+    },
   }
+}
+
+function renderCluster(cluster: HTMLElement, rows: HelpKey[][]) {
+  cluster.replaceChildren(...rows.map(helpRow))
 }
 
 function helpRow(items: HelpKey[]) {
@@ -109,7 +136,7 @@ function helpNote(text: string) {
 function helpKey(key: string) {
   const element = document.createElement('kbd')
 
-  element.className = key === 'space' ? 'help-key help-key-space' : 'help-key'
+  element.className = key === 'space' ? 'help-key help-key-space' : key === 'tab' ? 'help-key help-key-tab' : 'help-key'
   element.textContent = key
 
   return element

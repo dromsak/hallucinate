@@ -270,6 +270,10 @@ canvas {
   min-width: 92px;
 }
 
+.help-key-tab {
+  min-width: 44px;
+}
+
 .help-label {
   font: 600 10px/1 ui-sans-serif, system-ui, sans-serif;
   letter-spacing: 0;
@@ -280,6 +284,12 @@ canvas {
 .help-box-speak {
   left: 24px;
   bottom: 24px;
+  width: 164px;
+}
+
+.help-box-alternative {
+  left: 24px;
+  bottom: 78px;
   width: 164px;
 }
 
@@ -325,6 +335,11 @@ canvas {
   .help-box-speak {
     left: 12px;
     bottom: 118px;
+  }
+
+  .help-box-alternative {
+    left: 12px;
+    bottom: 168px;
   }
 
   .help-box-toggle {

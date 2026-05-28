@@ -1,17 +1,29 @@
 import type { Vec3 } from './types.ts'
 
+let alternativeInput = true
+
 export function readMoveInput(keys: Set<string>, target: Vec3) {
-  target[0] = Number(keys.has('l') || keys.has('arrowright')) - Number(keys.has('j') || keys.has('arrowleft'))
+  const left = alternativeInput ? 'a' : 'j'
+  const right = alternativeInput ? 'd' : 'l'
+  const forward = alternativeInput ? 'w' : 'i'
+  const back = alternativeInput ? 's' : 'k'
+
+  target[0] = Number(keys.has(right) || keys.has('arrowright')) - Number(keys.has(left) || keys.has('arrowleft'))
   target[1] = 0
-  target[2] = Number(keys.has('i') || keys.has('arrowup')) - Number(keys.has('k') || keys.has('arrowdown'))
+  target[2] = Number(keys.has(forward) || keys.has('arrowup')) - Number(keys.has(back) || keys.has('arrowdown'))
 
   return target
+}
+
+export function setAlternativeInput(value: boolean) {
+  alternativeInput = value
 }
 
 export function bindKeyboardInput(options: {
   activeInput: HTMLInputElement
   keys: Set<string>
   openChatInput: () => void
+  setAlternativeInput: (value: boolean) => void
   toggleHelp: () => void
   cycleHair: (direction: number) => void
   cycleHairColor: (direction: number) => void
@@ -31,72 +43,82 @@ export function bindKeyboardInput(options: {
       return
     }
 
-    if (event.key.toLowerCase() === 'h') {
+    if (event.code === 'Tab') {
+      event.preventDefault()
+      alternativeInput = !alternativeInput
+      options.keys.clear()
+      options.setAlternativeInput(alternativeInput)
+      return
+    }
+
+    const key = event.key.toLowerCase()
+
+    if (key === 'h') {
       options.toggleHelp()
       return
     }
 
-    if (event.key.toLowerCase() === 'q') {
+    if ((!alternativeInput && key === 'q') || (alternativeInput && key === 'u')) {
       options.cycleHair(-1)
       return
     }
 
-    if (event.key.toLowerCase() === 'w') {
+    if ((!alternativeInput && key === 'w') || (alternativeInput && key === 'i')) {
       options.cycleHair(1)
       return
     }
 
-    if (event.key.toLowerCase() === 'd') {
+    if ((!alternativeInput && key === 'd') || (alternativeInput && key === 'l')) {
       options.cycleIdle(-1)
       return
     }
 
-    if (event.key.toLowerCase() === 'f') {
+    if ((!alternativeInput && key === 'f') || (alternativeInput && key === ';')) {
       options.cycleIdle(1)
       return
     }
 
-    if (event.key === '1') {
+    if ((!alternativeInput && event.key === '1') || (alternativeInput && event.key === '7')) {
       options.cycleHairColor(-1)
       return
     }
 
-    if (event.key === '2') {
+    if ((!alternativeInput && event.key === '2') || (alternativeInput && event.key === '8')) {
       options.cycleHairColor(1)
       return
     }
 
-    if (event.key === '3') {
+    if ((!alternativeInput && event.key === '3') || (alternativeInput && event.key === '9')) {
       options.cycleSkin(-1)
       return
     }
 
-    if (event.key === '4') {
+    if ((!alternativeInput && event.key === '4') || (alternativeInput && event.key === '0')) {
       options.cycleSkin(1)
       return
     }
 
-    if (event.key.toLowerCase() === 'a') {
+    if ((!alternativeInput && key === 'a') || (alternativeInput && key === 'j')) {
       options.cycleShirt(-1)
       return
     }
 
-    if (event.key.toLowerCase() === 's') {
+    if ((!alternativeInput && key === 's') || (alternativeInput && key === 'k')) {
       options.cycleShirt(1)
       return
     }
 
-    if (event.key.toLowerCase() === 'z') {
+    if ((!alternativeInput && key === 'z') || (alternativeInput && key === 'm')) {
       options.cyclePants(-1)
       return
     }
 
-    if (event.key.toLowerCase() === 'x') {
+    if ((!alternativeInput && key === 'x') || (alternativeInput && key === ',')) {
       options.cyclePants(1)
       return
     }
 
-    options.keys.add(event.key.toLowerCase())
+    options.keys.add(key)
   })
 
   addEventListener('keyup', event => {
