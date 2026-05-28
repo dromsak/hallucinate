@@ -56,23 +56,43 @@ export function createMultiplayer(options: {
   else {
     url = `ws://${location.hostname}:3001`
   }
-  const socket = new WebSocket(url)
   const heartbeatInterval = 5_000
+  const reconnectDelay = 1_500
+  let socket = connect()
+  let heartbeat = 0
+  let reconnect = 0
+  let closed = false
   let selfId = 0
   let room = options.initialRoom
   let lastKeys = -1
   let lastAngle = -1
   let lastMode = -1
 
-  socket.binaryType = 'arraybuffer'
-  socket.addEventListener('open', () => {
-    sendMotion()
-    send(encodeRoomChange(room))
-  })
-  const heartbeat = setInterval(() => send(encodeHeartbeat()), heartbeatInterval)
+  function connect() {
+    const next = new WebSocket(url)
 
-  socket.addEventListener('close', () => clearInterval(heartbeat))
-  socket.addEventListener('message', event => {
+    next.binaryType = 'arraybuffer'
+    next.addEventListener('open', () => {
+      clearTimeout(reconnect)
+      heartbeat = setInterval(() => send(encodeHeartbeat()), heartbeatInterval)
+      sendMotion()
+      send(encodeRoomChange(room))
+    })
+    next.addEventListener('close', () => {
+      clearInterval(heartbeat)
+
+      if (!closed) {
+        reconnect = setTimeout(() => {
+          socket = connect()
+        }, reconnectDelay)
+      }
+    })
+    next.addEventListener('message', receive)
+
+    return next
+  }
+
+  function receive(event: MessageEvent<ArrayBuffer>) {
     const view = new DataView(event.data as ArrayBuffer)
     const type = view.getUint8(0)
 
@@ -140,7 +160,7 @@ export function createMultiplayer(options: {
         options.onMessage(message.id, message.text)
       }
     }
-  })
+  }
 
   function send(data: ArrayBuffer) {
     if (socket.readyState === WebSocket.OPEN) {
@@ -200,7 +220,9 @@ export function createMultiplayer(options: {
       }
     },
     close() {
+      closed = true
       clearInterval(heartbeat)
+      clearTimeout(reconnect)
       socket.close()
     },
   }
