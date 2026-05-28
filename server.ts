@@ -210,6 +210,7 @@ async function serveStatic(request: Request) {
     })
   }
 
+  const url = new URL(request.url)
   const path = decodeURIComponent(url.pathname)
   const assetPath = path === '/' ? join(dist, 'index.html') : resolve(dist, `.${path}`)
   const assetRelativePath = relative(dist, assetPath)
