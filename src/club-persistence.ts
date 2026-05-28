@@ -26,11 +26,19 @@ export function restoreClubState(options: {
   const state = readClubState(options.key)
 
   if (state) {
-    setVec3(options.characterPosition, state.character)
-    setVec3(options.camera.position, state.camera)
-    options.camera.turn = state.cameraTurn
-    options.localCharacter.turn = state.characterTurn
-    options.localCharacter.velocityY = state.velocityY
+    setVec3(options.characterPosition, [
+      state.character[0] ?? options.characterPosition[0],
+      state.character[1] ?? options.characterPosition[1],
+      state.character[2] ?? options.characterPosition[2],
+    ])
+    setVec3(options.camera.position, [
+      state.camera[0] ?? options.camera.position[0],
+      state.camera[1] ?? options.camera.position[1],
+      state.camera[2] ?? options.camera.position[2],
+    ])
+    options.camera.turn = state.cameraTurn ?? options.camera.turn
+    options.localCharacter.turn = state.characterTurn ?? options.localCharacter.turn
+    options.localCharacter.velocityY = state.velocityY ?? options.localCharacter.velocityY
     options.hairController.index = state.characterHairIndex ?? options.hairController.index
     options.hairController.colorIndex = state.characterHairColorIndex ?? options.hairController.colorIndex
     options.idleClipIndex.set(normalizeIndex(state.idleClipIndex ?? 0, options.idleClipCount))

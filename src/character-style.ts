@@ -6,8 +6,8 @@ const topStyleCache = new Map<number, ReturnType<typeof createTopStyleData>>()
 const resolvedStyleCache = new Map<number, ResolvedPlayerStyle>()
 
 export function createCharacterStyleController() {
-  let shirtColorIndex = 1
-  let topStyleIndex = 1
+  let shirtColorIndex = 0
+  let topStyleIndex = 0
   let topMode: TopMode = 'shirt'
   let pantsColorIndex = 0
   let bottomStyleIndex = 0

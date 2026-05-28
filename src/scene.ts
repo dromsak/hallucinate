@@ -1,7 +1,7 @@
 import { characterFloor } from './character-data.ts'
 import { clamp } from './math.ts'
-import { backDoor, bartenderBar, bartenderStools, djBooth, djSpeakers, outsideBounds, outsideCouches, outsideDjBooth,
-  outsideDjSpeakers, outsideHut, outsideHutBar, outsideHutBarStools, outsideHutDeckHeight,
+import { backDoor, bartenderBar, bartenderStools, djBooth, djSpeakers, outsideBounds, outsideBuddha, outsideCouches,
+  outsideDjBooth, outsideDjSpeakers, outsideHut, outsideHutBar, outsideHutBarStools, outsideHutDeckHeight,
   roomBounds } from './scene-data.ts'
 import type { Bounds, CircleBounds, Vec3 } from './types.ts'
 
@@ -39,6 +39,7 @@ const insideLeft = roomBounds.left + 0.8
 const insideRight = roomBounds.right - 0.8
 const insideBack = roomBounds.back + 0.8
 const insideFront = roomBounds.front - 0.8
+const buddhaSeatId = 'buddha'
 
 export function walkHeight(x: number, _y: number, z: number) {
   if (inBounds(x, z, outsideHut) || inBounds(x, z, outsideHutBarDeckBounds)) {
@@ -67,6 +68,7 @@ export function collideRoom(position: Vec3, outsideTree: CircleBounds, outside =
     position[2] = clamp(position[2], outsideBounds.back, outsideBounds.front)
     collideBuildingWalls(position, 0.45)
     collideCircle(position, outsideTree)
+    collideCircle(position, outsideBuddha)
     collidePaddedBounds(position, outsideDjBoothCollision)
     collidePaddedBounds(position, outsideHutBarCollision)
 
@@ -110,14 +112,27 @@ export function collideRoom(position: Vec3, outsideTree: CircleBounds, outside =
   }
 }
 
-export function seatAt(position: Vec3, occupiedSeats = new Set<string>(), padding = 0.46): Seat | undefined {
+export function seatAt(position: Vec3, occupiedSeats = new Set<string>(), padding = 0.46, includeOccupied = false):
+  | Seat
+  | undefined
+{
+  const buddha = buddhaSeat()
+  const buddhaX = position[0] - outsideBuddha.x
+  const buddhaZ = position[2] - outsideBuddha.z
+
+  if (buddhaX * buddhaX + buddhaZ * buddhaZ < (outsideBuddha.radius + padding) ** 2
+    && (includeOccupied || !occupiedSeats.has(buddha.id)))
+  {
+    return buddha
+  }
+
   for (const couch of outsideCouches) {
     const bounds = paddedBounds(couch, padding)
 
     if (position[0] > bounds.left && position[0] < bounds.right && position[2] > bounds.back
       && position[2] < bounds.front)
     {
-      return nearestCouchSeat(couch, position, occupiedSeats)
+      return nearestCouchSeat(couch, position, occupiedSeats, includeOccupied)
     }
   }
 
@@ -127,7 +142,7 @@ export function seatAt(position: Vec3, occupiedSeats = new Set<string>(), paddin
     const seat = stoolSeat(stool, i)
 
     if (position[0] > bounds.left && position[0] < bounds.right && position[2] > bounds.back
-      && position[2] < bounds.front && !occupiedSeats.has(seat.id))
+      && position[2] < bounds.front && (includeOccupied || !occupiedSeats.has(seat.id)))
     {
       return seat
     }
@@ -136,13 +151,27 @@ export function seatAt(position: Vec3, occupiedSeats = new Set<string>(), paddin
 
 export function seats() {
   return [
+    buddhaSeat(),
     ...outsideCouches.flatMap(couch => couchSeats(couch)),
     ...seatStools.map((stool, index) => stoolSeat(stool, index)),
   ]
 }
 
-function nearestCouchSeat(couch: (typeof outsideCouches)[number], position: Vec3, occupiedSeats: Set<string>) {
-  const seats = couchSeats(couch).filter(seat => !occupiedSeats.has(seat.id))
+function buddhaSeat(): Seat {
+  return {
+    id: buddhaSeatId,
+    position: [outsideBuddha.x, characterFloor + 0.8, outsideBuddha.z - 0.3],
+    turn: Math.PI,
+  }
+}
+
+function nearestCouchSeat(
+  couch: (typeof outsideCouches)[number],
+  position: Vec3,
+  occupiedSeats: Set<string>,
+  includeOccupied: boolean,
+) {
+  const seats = couchSeats(couch).filter(seat => includeOccupied || !occupiedSeats.has(seat.id))
 
   seats.sort((a, b) => distanceSq(position, a.position) - distanceSq(position, b.position))
 

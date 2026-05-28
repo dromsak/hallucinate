@@ -85,7 +85,7 @@ export function createChatUi(
         anchor[2] = bubble.position[2]
         projectWallPointInto(anchor, projector, point)
         const x = Math.round(point.x)
-        const y = Math.round(point.y - 76)
+        const y = Math.round(point.y - 68)
 
         if (x !== bubble.x || y !== bubble.y) {
           bubble.x = x

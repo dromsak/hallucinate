@@ -7,6 +7,7 @@ import {
   smoothAngle,
 } from './math.ts'
 import { collideRoom, seatAt, walkHeight } from './scene.ts'
+import type { Seat } from './scene.ts'
 import type { BottomMode, CharacterMode, CircleBounds, Vec3 } from './types.ts'
 
 export function createLocalCharacter(keys: Set<string>) {
@@ -53,6 +54,7 @@ export function createLocalCharacter(keys: Set<string>) {
       outsideTree: CircleBounds,
       bottomMode: BottomMode,
       occupiedSeats: Set<string>,
+      takeSeat: (seat: Seat) => void,
     ) {
       this.readInput()
       const moving = lengthSq(input) > 0
@@ -98,9 +100,10 @@ export function createLocalCharacter(keys: Set<string>) {
 
         position[0] += direction[0] * delta * 5
         position[2] += direction[2] * delta * 5
-        const nextSeat = couchRelease <= 0 ? seatAt(position, occupiedSeats) : undefined
+        const nextSeat = couchRelease <= 0 ? seatAt(position, occupiedSeats, 0.46, true) : undefined
 
         if (nextSeat) {
+          takeSeat(nextSeat)
           seated = true
           seat = nextSeat.id
           occupiedSeats.add(seat)

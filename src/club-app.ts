@@ -11,17 +11,19 @@ import { renderClubFrame } from './club-renderer.ts'
 import { createSaveTimer, readClubState } from './club-state.ts'
 import { createDjVideoUi } from './dj-video-ui.ts'
 import { getDomElements } from './dom-elements.ts'
+import { createHelpUi } from './help-ui.ts'
 import { addRoom, addRoomSmoke, addWallStrips } from './environment-object.ts'
 import { bindKeyboardInput } from './input.ts'
 import { createLocalCharacter } from './local-character.ts'
 import { lengthSq } from './math.ts'
 import { createMultiplayer, updateRemotePlayers } from './multiplayer.ts'
-import { createPlayers, updatePlayers } from './player-system.ts'
+import { createPlayers, takeNpcSeat, updatePlayers } from './player-system.ts'
 import { createWallProjector } from './projection.ts'
-import { backDoor, roomBounds } from './scene-data.ts'
+import { outsideBuddha, roomBounds } from './scene-data.ts'
 import { createSceneLighting } from './scene-lighting.ts'
 import {
   isOutside,
+  seatAt,
   usesSkyBackground,
 } from './scene.ts'
 import {
@@ -38,6 +40,7 @@ import {
   strobeVertex,
   vertex,
 } from './shaders.ts'
+import { loadStaticFbxObject } from './static-fbx-object.ts'
 import { createStrobeDrawController } from './strobe-draw.ts'
 import { createStrobeLights } from './strobe-object.ts'
 import { loadOutsideTree } from './tree-world.ts'
@@ -69,7 +72,7 @@ if (clubGlobal.clubFrameId !== undefined) {
   cancelAnimationFrame(clubGlobal.clubFrameId)
 }
 
-const { canvas, djVideo, chatForm, chatInput, chatBubble, roomButtons, intro, introProgress } = getDomElements()
+const { canvas, djVideo, chatForm, chatInput, chatBubble, intro, introBar, introProgress } = getDomElements()
 
 const gl = canvas.getContext('webgl2', {
   antialias: false,
@@ -89,6 +92,7 @@ const saveKey = 'club-state'
 const bloomScale = 0.5
 const keys = new Set<string>()
 const occupiedSeats = new Set<string>()
+const remoteSeats = new Set<string>()
 let idleClipIndex = 0
 const localCharacter = createLocalCharacter(keys)
 const characterPosition = localCharacter.position
@@ -96,10 +100,11 @@ const hairController = createCharacterHairController()
 const styleController = createCharacterStyleController()
 const chatUi = createChatUi(chatForm, chatInput, chatBubble, characterPosition)
 const djVideoUi = createDjVideoUi(djVideo, characterPosition)
+const helpUi = createHelpUi()
 const cameraController = createCameraController(canvas, characterPosition)
 function cycleIdle(direction: number) {
   idleClipIndex = (idleClipIndex + direction + idleClipNames.length) % idleClipNames.length
-  console.log(`idle animation: ${idleClipNames[idleClipIndex]}`)
+  // console.log(`idle animation: ${idleClipNames[idleClipIndex]}`)
 }
 const idleClipState = {
   set(value: number) {
@@ -110,6 +115,7 @@ const wallProjector = createWallProjector({ eye: [0, 0, 1], center: [0, 0, 0] },
 const pixelRatio = createAdaptivePixelRatio()
 let outsideTree: CircleBounds = { x: 0, z: 20.5, radius: 0.75 }
 let lastStamp = 0
+let buddhaLoaded = false
 let treeLoaded = false
 let introHidden = false
 let videoPlaying = false
@@ -118,7 +124,12 @@ let doorCoverReleased = true
 const savedState = readClubState(saveKey)
 let activeRoom = savedState?.room === 1 ? 1 : savedState ? Number(!isOutside(savedState.character)) : 0
 let requestedRoom = activeRoom
+let lastPoseLog = 0
 const saveTimer = createSaveTimer(0.5)
+const roomStarts = [
+  { x: -8.61, z: 9.64, angle: 0.505 },
+  { x: -4.75, z: roomBounds.front - 0.85, angle: 0 },
+]
 
 addRoom(vertices)
 addWallStrips(lights)
@@ -262,15 +273,38 @@ djVideoUi.setZoneFromPosition()
 djVideoUi.load()
 
 function moveToRoom(room: number) {
-  characterPosition[0] = backDoor.x
+  const start = roomStarts[room]!
+
+  characterPosition[0] = start.x
   characterPosition[1] = characterFloor
-  characterPosition[2] = room === 0 ? roomBounds.front + 0.85 : roomBounds.front - 0.85
+  characterPosition[2] = start.z
+  localCharacter.turn = start.angle
+  cameraController.turn = start.angle
   localCharacter.velocityY = 0
   djVideoUi.setZoneFromPosition()
+  logPlayerPose(`room ${room}`)
+}
+
+function logPlayerPose(label: string) {
+  console.log(
+    `${label}: x=${characterPosition[0].toFixed(2)} y=${characterPosition[1].toFixed(2)} z=${
+      characterPosition[2].toFixed(2)
+    } angle=${localCharacter.turn.toFixed(3)}`,
+  )
+}
+
+function logPlayerPoseEvery(stamp: number) {
+  if (stamp >= lastPoseLog + 250) {
+    lastPoseLog = stamp
+    logPlayerPose(`room ${activeRoom}`)
+  }
 }
 
 if (activeRoom !== Number(!isOutside(characterPosition))) {
   moveToRoom(activeRoom)
+}
+else {
+  logPlayerPose(`room ${activeRoom}`)
 }
 
 function localMoveAngle() {
@@ -283,14 +317,6 @@ function localMoveAngle() {
   return Math.atan2(x, z)
 }
 
-function updateRoomButtons() {
-  roomButtons.forEach((button, room) => {
-    button.dataset.active = `${room === activeRoom}`
-  })
-}
-
-updateRoomButtons()
-
 let multiplayer: ReturnType<typeof createMultiplayer>
 
 multiplayer = createMultiplayer({
@@ -298,6 +324,7 @@ multiplayer = createMultiplayer({
   localTurn: () => localCharacter.turn,
   localMoveAngle,
   localInput: localCharacter.input,
+  localMode: () => localCharacter.mode,
   localIdleClipIndex: () => idleClipIndex,
   localStyle: () => ({
     topStyleIndex: styleController.topStyleIndex,
@@ -322,7 +349,6 @@ multiplayer = createMultiplayer({
       styleController,
     })
     chatUi.clear()
-    updateRoomButtons()
   },
   onMessage: (id, text) => {
     const position = id === multiplayer.selfId ? characterPosition : multiplayer.players.get(id)!.position
@@ -336,6 +362,7 @@ bindKeyboardInput({
   activeInput: chatInput,
   keys,
   openChatInput: () => chatUi.open(),
+  toggleHelp: () => helpUi.toggle(),
   cycleHair: direction => {
     hairController.cycleHair(direction)
     multiplayer.sendMotion()
@@ -361,15 +388,6 @@ bindKeyboardInput({
 chatForm.addEventListener('submit', event => {
   event.preventDefault()
   multiplayer.sendMessage(chatUi.submit())
-})
-
-roomButtons.forEach((button, room) => {
-  button.addEventListener('click', () => {
-    moveToRoom(room)
-    requestedRoom = room
-    multiplayer.sendMotion()
-    multiplayer.sendRoomChange(room)
-  })
 })
 
 const resize = () => {
@@ -398,7 +416,9 @@ const draw = (stamp: number) => {
   pixelRatio.update(delta, stamp)
   clubGlobal.clubPixelRatio = pixelRatio.ratio()
   resize()
-  localCharacter.update(delta, cameraController.turn, outsideTree, styleController.bottomMode, occupiedSeats)
+  localCharacter.update(delta, cameraController.turn, outsideTree, styleController.bottomMode, occupiedSeats,
+    seat => takeNpcSeat(npcPlayers, seat, stamp * 0.001, outsideTree, occupiedSeats))
+  // logPlayerPoseEvery(stamp)
   const room = Number(!isOutside(characterPosition))
 
   if (room !== requestedRoom) {
@@ -412,6 +432,7 @@ const draw = (stamp: number) => {
 
   updatePlayers(npcPlayers, delta, stamp * 0.001, outsideTree, occupiedSeats)
   updateRemotePlayers(multiplayer.players.values(), delta, outsideTree)
+  takeRemoteSeats(stamp * 0.001)
   renderPlayers.length = 0
   renderPlayers.push(...npcPlayers, ...multiplayer.players.values())
   cameraController.update(delta, localCharacter.input, localCharacter.turn, lengthSq(localCharacter.input) > 0
@@ -548,19 +569,42 @@ function updateIntro() {
   const progress = Math.round((
     Number(characterRenderSystem.assetsLoaded)
     + Number(characterRenderSystem.detailsLoaded)
+    + Number(buddhaLoaded)
     + Number(treeLoaded)
-  ) / 3 * 100)
+  ) / 4 * 100)
 
   introProgress.textContent = `${progress}%`
+  introBar.style.transform = `scaleX(${progress / 100})`
 
   const ready = progress === 100
 
   if (ready && !introHidden) {
     introHidden = true
     intro.dataset.hidden = 'true'
+    helpUi.hide()
   }
 
   return progress
+}
+
+function takeRemoteSeats(time: number) {
+  for (const seat of remoteSeats) {
+    occupiedSeats.delete(seat)
+  }
+
+  remoteSeats.clear()
+
+  for (const player of multiplayer.players.values()) {
+    if (lengthSq(player.input) === 0) {
+      const seat = seatAt(player.position, occupiedSeats, 0.46, true)
+
+      if (seat) {
+        takeNpcSeat(npcPlayers, seat, time, outsideTree, occupiedSeats)
+        occupiedSeats.add(seat.id)
+        remoteSeats.add(seat.id)
+      }
+    }
+  }
 }
 
 import.meta.hot?.dispose(() => {
@@ -590,7 +634,7 @@ const { addLocalReflection, addSunLitTriangle } = createSceneLighting({
   getTree: () => outsideTree,
   strobeReflection: (point, normal) => strobeController.reflection(point, normal),
 })
-const npcPlayers = createPlayers(0, outsideTree, occupiedSeats)
+const npcPlayers = createPlayers(150, outsideTree, occupiedSeats)
 const renderPlayers: Player[] = [...npcPlayers]
 const characterRenderSystem = createCharacterRenderSystem({
   boxInstanceBuffer: characterBoxInstanceBuffer,
@@ -620,6 +664,23 @@ loadOutsideTree(gl, treeShadowMap, vertices, outsideTree, addSunLitTriangle)
   .then(nextTree => {
     outsideTree = nextTree
     treeLoaded = true
+    refreshRoomBuffer()
+  })
+  .catch((error: unknown) => {
+    console.error(error)
+  })
+
+loadStaticFbxObject(vertices, {
+  color: [0.46, 0.42, 0.36],
+  height: 2.9,
+  lightBounds: { x: outsideBuddha.x, z: 29.3, radius: 0.95 },
+  path: '/buddha.fbx',
+  position: [outsideBuddha.x, characterFloor, outsideBuddha.z],
+  sourceUp: 'z',
+  turn: Math.PI,
+}, addSunLitTriangle)
+  .then(() => {
+    buddhaLoaded = true
     refreshRoomBuffer()
   })
   .catch((error: unknown) => {

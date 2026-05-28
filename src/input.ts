@@ -12,6 +12,7 @@ export function bindKeyboardInput(options: {
   activeInput: HTMLInputElement
   keys: Set<string>
   openChatInput: () => void
+  toggleHelp: () => void
   cycleHair: (direction: number) => void
   cycleHairColor: (direction: number) => void
   cycleIdle: (direction: number) => void
@@ -26,6 +27,11 @@ export function bindKeyboardInput(options: {
     if (event.code === 'Space') {
       event.preventDefault()
       options.openChatInput()
+      return
+    }
+
+    if (event.key.toLowerCase() === 'h') {
+      options.toggleHelp()
       return
     }
 

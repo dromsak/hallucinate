@@ -4,9 +4,10 @@ export function getDomElements() {
   const chatForm = document.createElement('form')
   const chatInput = document.createElement('input')
   const chatBubble = document.createElement('div')
-  const roomControls = document.createElement('div')
-  const roomButtons = [document.createElement('button'), document.createElement('button')]
   const intro = document.createElement('div')
+  const introPanel = document.createElement('div')
+  const introTrack = document.createElement('div')
+  const introBar = document.createElement('div')
   const introProgress = document.createElement('div')
 
   canvas.id = 'scene'
@@ -25,24 +26,18 @@ export function getDomElements() {
   chatBubble.id = 'chat-bubble'
   chatBubble.className = 'absolute left-0 top-0 z-20'
 
-  roomControls.id = 'room-controls'
-  roomControls.className = 'absolute left-3 top-3 z-30 flex gap-1'
-
-  roomButtons.forEach((button, room) => {
-    button.type = 'button'
-    button.textContent = room === 0 ? 'Outside' : 'Inside'
-    button.dataset.room = `${room}`
-    button.className = 'room-button'
-    roomControls.append(button)
-  })
-
   intro.id = 'intro'
+  introPanel.id = 'intro-panel'
+  introTrack.id = 'intro-track'
+  introBar.id = 'intro-bar'
   introProgress.id = 'intro-progress'
   introProgress.textContent = '0%'
 
   chatForm.append(chatInput)
-  intro.append(introProgress)
-  document.body.prepend(canvas, djVideo, chatForm, chatBubble, roomControls, intro)
+  introTrack.append(introBar)
+  introPanel.append(introTrack, introProgress)
+  intro.append(introPanel)
+  document.body.prepend(canvas, djVideo, chatForm, chatBubble, intro)
 
   return {
     canvas,
@@ -50,8 +45,8 @@ export function getDomElements() {
     chatForm,
     chatInput,
     chatBubble,
-    roomButtons,
     intro,
+    introBar,
     introProgress,
   }
 }

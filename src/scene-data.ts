@@ -1,4 +1,4 @@
-import type { Bounds, Vec3, VideoZone } from './types.ts'
+import type { Bounds, CircleBounds, Vec3, VideoZone } from './types.ts'
 
 export const djBooth: Bounds = { x: 0, z: -21.55, width: 3.6, depth: 1.24 }
 export const djSpeakers: Bounds[] = [
@@ -17,6 +17,7 @@ export const outsideDjSpeakers: Bounds[] = [
   { x: -4.16, z: 29.08, width: 0.71, depth: 0.79 },
   { x: 4.16, z: 29.08, width: 0.71, depth: 0.79 },
 ]
+export const outsideBuddha: CircleBounds = { x: 11.5, z: 27.9, radius: 1.05 }
 export const outsideHut: Bounds = { x: -18, z: 20.5, width: 6.2, depth: 5 }
 export const outsideHutDeckHeight = 0.32
 export const outsideHutBar: Bounds = {

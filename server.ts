@@ -50,8 +50,9 @@ const server = Bun.serve<Client>({
           keys: 0,
           angle: 0,
           idleClipIndex: 0,
+          mode: 0,
           style: {
-            topStyleIndex: 1,
+            topStyleIndex: 0,
             bottomStyleIndex: 0,
             hairIndex: 0,
             hairColorIndex: 0,

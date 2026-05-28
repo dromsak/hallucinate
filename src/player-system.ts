@@ -184,6 +184,33 @@ export function updatePlayers(
   }
 }
 
+export function takeNpcSeat(
+  players: Player[],
+  seat: ReturnType<typeof seats>[number],
+  time: number,
+  outsideTree: CircleBounds,
+  occupiedSeats: Set<string>,
+) {
+  const player = players.find(player => player.seat === seat.id)
+
+  if (!player) {
+    return
+  }
+
+  occupiedSeats.delete(player.seat!)
+  player.seat = undefined
+  player.sittingUntil = undefined
+  player.mode = 'run'
+  player.motionBlend = 1
+  player.input[0] = Math.sin(player.turn)
+  player.input[1] = 0
+  player.input[2] = Math.cos(player.turn)
+  player.position[0] += player.input[0] * 0.46
+  player.position[2] += player.input[2] * 0.46
+  player.leavingSeatUntil = time + leaveSeatTime
+  choosePlayerDestination(player, time, outsideTree, occupiedSeats)
+}
+
 function updateRandomPause(player: Player, time: number) {
   if (player.pauseUntil && time < player.pauseUntil) {
     player.input[0] = 0

@@ -14,8 +14,10 @@ import {
   encodeKeys,
   encodeRoomChange,
   MESSAGE,
+  modeToProtocol,
   protocolToAngle,
   protocolToScene,
+  protocolToMode,
   S_LEAVE,
   S_MOTION,
   S_ROOM_STATE,
@@ -24,14 +26,15 @@ import {
   type SpawnPacket,
   truncateMessage,
 } from './protocol.ts'
-import { collideRoom, walkHeight } from './scene.ts'
-import type { CircleBounds, Player, Vec3 } from './types.ts'
+import { collideRoom, seatAt, walkHeight } from './scene.ts'
+import type { CharacterMode, CircleBounds, Player, Vec3 } from './types.ts'
 
 export function createMultiplayer(options: {
   localPosition: Vec3
   localTurn: () => number
   localMoveAngle: () => number
   localInput: Vec3
+  localMode: () => CharacterMode
   localIdleClipIndex: () => number
   localStyle: () => {
     topStyleIndex: number
@@ -51,11 +54,12 @@ export function createMultiplayer(options: {
   let room = options.initialRoom
   let lastKeys = -1
   let lastAngle = -1
+  let lastMode = -1
 
   socket.binaryType = 'arraybuffer'
   socket.addEventListener('open', () => {
     sendMotion()
-    sendRoomChange(room)
+    send(encodeRoomChange(room))
   })
   socket.addEventListener('message', event => {
     const view = new DataView(event.data as ArrayBuffer)
@@ -123,7 +127,10 @@ export function createMultiplayer(options: {
   }
 
   function sendMotion() {
-    const keys = encodeKeys(options.localInput)
+    const mode = options.localMode()
+    const protocolMode = modeToProtocol(mode)
+    const seated = mode === 'manSitting' || mode === 'womanSitting'
+    const keys = seated ? 0 : encodeKeys(options.localInput)
     const angle = angleToProtocol(keys === 0 ? options.localTurn() : options.localMoveAngle())
 
     send(encodeClientMotion({
@@ -132,10 +139,12 @@ export function createMultiplayer(options: {
       keys,
       angle,
       idleClipIndex: options.localIdleClipIndex(),
+      mode: protocolMode,
       style: options.localStyle(),
     }))
     lastKeys = keys
     lastAngle = angle
+    lastMode = protocolMode
   }
 
   return {
@@ -159,10 +168,12 @@ export function createMultiplayer(options: {
     },
     sendMotion,
     sendMotionIfKeysChanged() {
-      const keys = encodeKeys(options.localInput)
+      const mode = options.localMode()
+      const protocolMode = modeToProtocol(mode)
+      const keys = mode === 'manSitting' || mode === 'womanSitting' ? 0 : encodeKeys(options.localInput)
       const angle = angleToProtocol(keys === 0 ? options.localTurn() : options.localMoveAngle())
 
-      if (keys !== lastKeys || (keys !== 0 && angle !== lastAngle)) {
+      if (keys !== lastKeys || protocolMode !== lastMode || (keys !== 0 && angle !== lastAngle)) {
         sendMotion()
       }
     },
@@ -177,7 +188,9 @@ export function updateRemotePlayers(players: Iterable<Player>, delta: number, ou
     const moving = lengthSq(player.input) > 0
 
     player.motionBlend = mix(player.motionBlend, moving ? 1 : 0, 1 - Math.exp(-8 * delta))
-    player.mode = player.motionBlend > 0.5 ? 'run' : 'stand'
+    if (player.mode !== 'manSitting' && player.mode !== 'womanSitting') {
+      player.mode = player.motionBlend > 0.5 ? 'run' : 'stand'
+    }
 
     if (moving) {
       player.position[0] += player.input[0] * delta * 5
@@ -185,7 +198,9 @@ export function updateRemotePlayers(players: Iterable<Player>, delta: number, ou
       collideRoom(player.position, outsideTree)
     }
 
-    player.position[1] = walkHeight(player.position[0], player.position[1], player.position[2])
+    player.position[1] = seatedMode(player.mode)
+      ? remoteSeatHeight(player)
+      : walkHeight(player.position[0], player.position[1], player.position[2])
   }
 }
 
@@ -194,7 +209,7 @@ function createRemotePlayer(packet: SpawnPacket): Player {
     position: [protocolToScene(packet.x), characterFloor, protocolToScene(packet.y)],
     turn: protocolToAngle(packet.angle),
     motionBlend: packet.keys === 0 ? 0 : 1,
-    mode: packet.keys === 0 ? 'stand' : 'run',
+    mode: protocolToMode(packet.mode),
     idleClipIndex: packet.idleClipIndex,
     input: decodeKeys(packet.keys, packet.angle),
     nextDecision: 0,
@@ -217,8 +232,19 @@ function applyRemotePose(player: Player, packet: SpawnPacket) {
   player.turn = protocolToAngle(packet.angle)
   player.input = decodeKeys(packet.keys, packet.angle)
   player.motionBlend = packet.keys === 0 ? 0 : 1
-  player.mode = packet.keys === 0 ? 'stand' : 'run'
+  player.mode = protocolToMode(packet.mode)
+  player.position[1] = seatedMode(player.mode)
+    ? remoteSeatHeight(player)
+    : walkHeight(player.position[0], player.position[1], player.position[2])
   player.idleClipIndex = packet.idleClipIndex
   player.style = packet.style
   player.resolvedStyle = resolvePlayerStyle(packet.style)
+}
+
+function seatedMode(mode: CharacterMode | undefined) {
+  return mode === 'manSitting' || mode === 'womanSitting'
+}
+
+function remoteSeatHeight(player: Player) {
+  return seatAt(player.position, new Set(), 0.46, true)!.position[1]
 }
