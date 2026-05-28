@@ -229,6 +229,8 @@ export function createMultiplayer(options: {
       if (next) {
         queue(encodeClientMessage(next))
       }
+
+      return next
     },
     sendMotion,
     sendMotionIfKeysChanged() {

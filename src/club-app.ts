@@ -342,6 +342,7 @@ function localMoveAngle() {
 }
 
 let multiplayer: ReturnType<typeof createMultiplayer>
+const predictedMessages = new Map<string, number>()
 
 multiplayer = createMultiplayer({
   localPosition: characterPosition,
@@ -377,6 +378,19 @@ multiplayer = createMultiplayer({
     chatUi.clear()
   },
   onMessage: (id, text) => {
+    if (id === multiplayer.selfId && predictedMessages.has(text)) {
+      const count = predictedMessages.get(text)!
+
+      if (count === 1) {
+        predictedMessages.delete(text)
+      }
+      else {
+        predictedMessages.set(text, count - 1)
+      }
+
+      return
+    }
+
     const position = id === multiplayer.selfId ? characterPosition : multiplayer.players.get(id)?.position ?? characterPosition
 
     chatUi.show(id, text, position, performance.now())
@@ -441,7 +455,12 @@ bindTapDestination({
 
 chatForm.addEventListener('submit', event => {
   event.preventDefault()
-  multiplayer.sendMessage(chatUi.submit())
+  const text = multiplayer.sendMessage(chatUi.submit())
+
+  if (text) {
+    predictedMessages.set(text, (predictedMessages.get(text) ?? 0) + 1)
+    chatUi.show(multiplayer.selfId, text, characterPosition, performance.now())
+  }
 })
 
 const resize = () => {
