@@ -52,7 +52,7 @@ jobs:
             sudo -n systemctl stop hallucinate
           '"
 
-      - name: Install production dependencies
+      - name: Install production dependencies and build
         env:
           SSH_USER: ${{ secrets.SSH_USER }}
           SSH_HOST: ${{ secrets.SSH_HOST }}
@@ -65,6 +65,7 @@ jobs:
             cd \"$REMOTE_PATH\"
             command -v bun
             bun install --production
+            bun run build
           '"
 
       - name: Start app
