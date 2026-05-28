@@ -84,13 +84,8 @@ export function createMultiplayer(options: {
       send(encodeRoomChange(room))
       flush()
     })
-    next.addEventListener('close', event => {
+    next.addEventListener('close', () => {
       clearInterval(heartbeat)
-
-      if (event.code === 1012 || event.reason === 'protocol') {
-        location.reload()
-        return
-      }
 
       if (!closed) {
         reconnect = setTimeout(() => {
