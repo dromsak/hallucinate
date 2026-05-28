@@ -93,6 +93,8 @@ export function encodeClientMotion(packet: MotionPacket) {
 }
 
 export function decodeClientMotion(view: DataView): MotionPacket {
+  expectSize(view, 1 + spawnSize - 2)
+
   return {
     ...readMotion(view, 1),
   }
@@ -109,6 +111,8 @@ export function encodeRoomChange(room: number) {
 }
 
 export function decodeRoomChange(view: DataView) {
+  expectSize(view, 2)
+
   return view.getUint8(1)
 }
 
@@ -132,6 +136,8 @@ export function encodeSpawn(packet: SpawnPacket) {
 }
 
 export function decodeSpawn(view: DataView, offset = 1): SpawnPacket {
+  expectSize(view, offset + spawnSize)
+
   return readSpawn(view, offset)
 }
 
@@ -146,6 +152,8 @@ export function encodeServerMotion(packet: SpawnPacket) {
 }
 
 export function decodeServerMotion(view: DataView): SpawnPacket {
+  expectSize(view, 1 + spawnSize)
+
   return readSpawn(view, 1)
 }
 
@@ -160,6 +168,8 @@ export function encodeLeave(id: number) {
 }
 
 export function decodeLeave(view: DataView) {
+  expectSize(view, 3)
+
   return view.getUint16(1)
 }
 
@@ -177,7 +187,10 @@ export function encodeRoomState(packet: RoomStatePacket) {
 }
 
 export function decodeRoomState(view: DataView): RoomStatePacket {
+  expectAtLeastSize(view, 6)
+
   const count = view.getUint16(4)
+  expectSize(view, 6 + count * spawnSize)
   const players: SpawnPacket[] = []
 
   for (let i = 0; i < count; i++) {
@@ -204,7 +217,10 @@ export function encodeClientMessage(text: string) {
 }
 
 export function decodeClientMessage(view: DataView) {
+  expectAtLeastSize(view, 3)
+
   const length = view.getUint16(1)
+  expectTextSize(view, 3, length)
 
   return textDecoder.decode(new Uint8Array(view.buffer, view.byteOffset + 3, length))
 }
@@ -223,7 +239,10 @@ export function encodeServerMessage(packet: MessagePacket) {
 }
 
 export function decodeServerMessage(view: DataView): MessagePacket {
+  expectAtLeastSize(view, 5)
+
   const length = view.getUint16(3)
+  expectTextSize(view, 5, length)
 
   return {
     id: view.getUint16(1),
@@ -233,6 +252,26 @@ export function decodeServerMessage(view: DataView): MessagePacket {
 
 export function truncateMessage(text: string) {
   return [...text.trim()].slice(0, messageMaxLength).join('')
+}
+
+function expectSize(view: DataView, size: number) {
+  if (view.byteLength !== size) {
+    throw new Error(`Invalid packet size ${view.byteLength}, expected ${size}`)
+  }
+}
+
+function expectAtLeastSize(view: DataView, size: number) {
+  if (view.byteLength < size) {
+    throw new Error(`Invalid packet size ${view.byteLength}, expected at least ${size}`)
+  }
+}
+
+function expectTextSize(view: DataView, offset: number, length: number) {
+  const size = offset + length
+
+  if (view.byteLength !== size) {
+    throw new Error(`Invalid text packet size ${view.byteLength}, expected ${size}`)
+  }
 }
 
 function writeSpawn(view: DataView, offset: number, packet: SpawnPacket) {

@@ -75,34 +75,47 @@ const server = Bun.serve<Client>({
     },
     message(socket, message) {
       const client = clients.get(socket)!
-      const view = messageView(message)
-      const type = view.getUint8(0)
 
-      client.lastSeen = Date.now()
+      try {
+        const view = messageView(message)
+        const type = view.getUint8(0)
 
-      if (type === C_HEARTBEAT) {
-        return
-      }
+        client.lastSeen = Date.now()
 
-      if (type === C_MOTION) {
-        const motion = decodeClientMotion(view)
-
-        client.pose = { id: client.id, ...motion }
-        broadcast(client.room, encodeServerMotion(client.pose), client)
-        return
-      }
-
-      if (type === C_ROOM_CHANGE) {
-        changeRoom(client, decodeRoomChange(view))
-        return
-      }
-
-      if (type === MESSAGE) {
-        const text = truncateMessage(decodeClientMessage(view))
-
-        if (text) {
-          broadcast(client.room, encodeServerMessage({ id: client.id, text }))
+        if (type === C_HEARTBEAT) {
+          return
         }
+
+        if (type === C_MOTION) {
+          const motion = decodeClientMotion(view)
+
+          client.pose = { id: client.id, ...motion }
+          broadcast(client.room, encodeServerMotion(client.pose), client)
+          return
+        }
+
+        if (type === C_ROOM_CHANGE) {
+          changeRoom(client, decodeRoomChange(view))
+          return
+        }
+
+        if (type === MESSAGE) {
+          const text = truncateMessage(decodeClientMessage(view))
+
+          if (text) {
+            broadcast(client.room, encodeServerMessage({ id: client.id, text }))
+          }
+
+          return
+        }
+
+        throw new Error(`Invalid client packet type ${type}`)
+      }
+      catch (e) {
+        console.error(e)
+        clients.delete(socket)
+        removeFromRoom(client)
+        socket.close(1003, 'invalid packet')
       }
     },
     close(socket) {
