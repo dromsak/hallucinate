@@ -24,29 +24,43 @@ import { extname, isAbsolute, join, relative, resolve } from 'node:path'
 
 type Client = {
   id: number
+  ip: string
   lastSeen: number
   lastMotionAt: number
   poseSynced: boolean
   room: number
-  socket: Bun.ServerWebSocket<Client>
+  socket: Bun.ServerWebSocket<SocketData>
   pose: SpawnPacket
+}
+
+type SocketData = {
+  ip: string
 }
 
 const port = Number(process.env.PORT ?? 3001)
 const dist = join(import.meta.dir, 'dist')
 const rooms = Array.from({ length: roomCount }, () => new Set<Client>())
-const clients = new Map<Bun.ServerWebSocket<Client>, Client>()
+const clients = new Map<Bun.ServerWebSocket<SocketData>, Client>()
 const heartbeatInterval = 10_000
 const clientTimeout = 30_000
+const maxConnectionsPerIp = 4
 const maxClientSpeed = 8
 const maxClientStep = 1.2
 const maxHairIndex = 32
 let nextId = 1
 
-const server = Bun.serve<Client>({
+const server = Bun.serve<SocketData>({
   port,
   async fetch(request, server) {
-    if (server.upgrade(request)) {
+    const ip = clientIp(request)
+
+    if (ipConnections(ip) >= maxConnectionsPerIp) {
+      console.error(`Rejected websocket from ${ip}`)
+
+      return new Response('Too Many Connections', { status: 429 })
+    }
+
+    if (server.upgrade(request, { data: { ip } })) {
       return
     }
 
@@ -57,6 +71,7 @@ const server = Bun.serve<Client>({
       const id = nextId++
       const client: Client = {
         id,
+        ip: socket.data.ip,
         lastSeen: Date.now(),
         lastMotionAt: Date.now(),
         poseSynced: false,
@@ -80,7 +95,6 @@ const server = Bun.serve<Client>({
       }
 
       clients.set(socket, client)
-      socket.data = client
       addToRoom(client, 0)
       sendRoomState(client)
       broadcast(client.room, encodeSpawn(client.pose), client)
@@ -150,6 +164,23 @@ console.log(`club multiplayer: ws://localhost:${server.port}`)
 console.log(`club static: http://localhost:${server.port}`)
 
 setInterval(syncRooms, heartbeatInterval)
+
+function clientIp(request: Request) {
+  return request.headers.get('cf-connecting-ip')
+    ?? request.headers.get('x-real-ip')
+    ?? request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+    ?? 'direct'
+}
+
+function ipConnections(ip: string) {
+  let count = 0
+
+  for (const client of clients.values()) {
+    count += Number(client.ip === ip)
+  }
+
+  return count
+}
 
 async function serveStatic(request: Request) {
   const method = request.method
