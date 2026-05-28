@@ -20,6 +20,7 @@ import {
 } from './src/protocol.ts'
 import { hairPalette, jewelPalette } from './src/character-data.ts'
 import { outsideBounds, roomBounds } from './src/scene-data.ts'
+import { seatAt } from './src/scene.ts'
 import { extname, isAbsolute, join, relative, resolve } from 'node:path'
 
 type Client = {
@@ -465,6 +466,10 @@ function validateMotionValues(motion: MotionPacket) {
 
   if (x < outsideBounds.left || x > outsideBounds.right || z < outsideBounds.back || z > outsideBounds.front) {
     throw new Error(`Invalid position ${x}, ${z}`)
+  }
+
+  if ((motion.mode === 2 || motion.mode === 3) && !seatAt([x, 0, z], new Set(), 0.46, true)) {
+    throw new Error(`Invalid seated position ${x}, ${z}`)
   }
 }
 

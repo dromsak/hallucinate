@@ -108,7 +108,7 @@ export function createMultiplayer(options: {
       players.clear()
 
       for (const player of state.players) {
-        if (player.id !== selfId) {
+        if (player.id !== selfId && validRemotePose(player)) {
           players.set(player.id, createRemotePlayer(player))
           previousIds.delete(player.id)
         }
@@ -128,7 +128,7 @@ export function createMultiplayer(options: {
     if (type === S_SPAWN) {
       const packet = decodeSpawn(view)
 
-      if (packet.id !== selfId) {
+      if (packet.id !== selfId && validRemotePose(packet)) {
         players.set(packet.id, createRemotePlayer(packet))
       }
 
@@ -139,7 +139,7 @@ export function createMultiplayer(options: {
       const packet = decodeServerMotion(view)
       const player = players.get(packet.id)
 
-      if (player) {
+      if (player && validRemotePose(packet)) {
         applyRemotePose(player, packet)
       }
 
@@ -285,6 +285,11 @@ function applyRemotePose(player: Player, packet: SpawnPacket) {
   player.idleClipIndex = packet.idleClipIndex
   player.style = packet.style
   player.resolvedStyle = resolvePlayerStyle(packet.style)
+}
+
+function validRemotePose(packet: SpawnPacket) {
+  return !seatedMode(protocolToMode(packet.mode))
+    || Boolean(seatAt([protocolToScene(packet.x), characterFloor, protocolToScene(packet.y)], new Set(), 0.46, true))
 }
 
 function seatedMode(mode: CharacterMode | undefined) {
