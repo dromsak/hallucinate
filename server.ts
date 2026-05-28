@@ -131,7 +131,7 @@ const server = Bun.serve<SocketData>({
         if (type === MESSAGE) {
           const text = truncateMessage(decodeClientMessage(view))
 
-          if (text && !binaryText(text)) {
+          if (text && !binaryText(text) && !slurText(text)) {
             broadcast(client.room, encodeServerMessage({ id: client.id, text }))
           }
 
@@ -330,6 +330,57 @@ function validateMotion(client: Client, motion: MotionPacket) {
 function binaryText(text: string) {
   return /^[01]+$/.test(text)
 }
+
+function slurText(text: string) {
+  const normalized = text.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '')
+
+  return slurs.some(slur => normalized.includes(slur))
+}
+
+const slurs = [
+  'nigger',
+  'nigga',
+  'niggah',
+  'nigguh',
+  'niglet',
+  'coon',
+  'jigaboo',
+  'porchmonkey',
+  'mooncricket',
+  'faggot',
+  'fag',
+  'dyke',
+  'homo',
+  'kike',
+  'yid',
+  'hebe',
+  'spic',
+  'beaner',
+  'greaser',
+  'chink',
+  'gook',
+  'zipperhead',
+  'wetback',
+  'raghead',
+  'towelhead',
+  'sandnigger',
+  'cameljockey',
+  'paki',
+  'gypsy',
+  'dago',
+  'wop',
+  'kraut',
+  'polack',
+  'mick',
+  'redskin',
+  'squaw',
+  'injun',
+  'jap',
+  'tranny',
+  'shemale',
+  'retard',
+  'mongoloid',
+]
 
 function validateMotionValues(motion: MotionPacket) {
   const x = protocolToScene(motion.x)
