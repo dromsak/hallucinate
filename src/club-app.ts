@@ -81,6 +81,8 @@ const {
   chatForm,
   chatInput,
   chatBubble,
+  chatLog,
+  onlineCount,
   onlineIndicator,
   intro,
   introBar,
@@ -105,6 +107,7 @@ let frameId = 0
 const saveKey = 'club-state'
 const helpSeenKey = 'club-help-seen'
 const bloomScale = 0.5
+const chatLogMax = 15
 const keys = new Set<string>()
 const occupiedSeats = new Set<string>()
 const remoteSeats = new Set<string>()
@@ -123,6 +126,25 @@ function syncOnlineIndicator() {
   onlineIndicator.dataset.hidden = String(helpUi.root.dataset.open === 'true')
 }
 syncOnlineIndicator()
+function addChatLogMessage(id: number, text: string) {
+  const row = document.createElement('div')
+
+  row.className = 'chat-log-message'
+  row.style.color = chatUserColor(id)
+  row.textContent = text
+  chatLog.append(row)
+
+  while (chatLog.childElementCount > chatLogMax) {
+    chatLog.firstElementChild!.remove()
+  }
+}
+
+function chatUserColor(id: number) {
+  const hue = (id * 137.508) % 360
+
+  return `hsl(${hue} 100% 78%)`
+}
+
 function cycleIdle(direction: number) {
   idleClipIndex = (idleClipIndex + direction + idleClipNames.length) % idleClipNames.length
   // console.log(`idle animation: ${idleClipNames[idleClipIndex]}`)
@@ -422,11 +444,12 @@ multiplayer = createMultiplayer({
 
     const position = id === multiplayer.selfId ? characterPosition : multiplayer.players.get(id)?.position ?? characterPosition
 
+    addChatLogMessage(id, text)
     chatUi.show(id, text, position, performance.now())
   },
   onLeave: id => chatUi.remove(id),
   onOnlineCount: count => {
-    onlineIndicator.textContent = `${count} online`
+    onlineCount.textContent = `${count} online`
   },
 })
 
@@ -492,6 +515,7 @@ chatForm.addEventListener('submit', event => {
 
   if (text) {
     predictedMessages.set(text, (predictedMessages.get(text) ?? 0) + 1)
+    addChatLogMessage(multiplayer.selfId, text)
     chatUi.show(multiplayer.selfId, text, characterPosition, performance.now())
   }
 })
