@@ -98,7 +98,6 @@ export function createMultiplayer(options: {
       room = Number(!isOutside(options.localPosition))
       sendMotion()
       send(encodeRoomChange(room))
-      sendVideoState()
       flush()
     })
     next.addEventListener('close', event => {
