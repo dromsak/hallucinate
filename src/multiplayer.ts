@@ -56,7 +56,7 @@ export function createMultiplayer(options: {
   onMessage: (id: number, text: string) => void
   onLeave: (id: number) => void
   onOnlineCount: (count: number) => void
-  onVideoState: (entries: VideoStateEntry[]) => void
+  onVideoState: (entries: VideoStateEntry[], preserveSameTrack: boolean) => void
   videoState: () => VideoStateEntry[]
 }) {
   const players = new Map<number, Player>()
@@ -76,7 +76,7 @@ export function createMultiplayer(options: {
   let reconnect = 0
   let closed = false
   let connectedOnce = false
-  let ignoreVideoState = false
+  let preserveVideoState = false
   const pending: ArrayBuffer[] = []
   let selfId = 0
   let room = options.initialRoom
@@ -90,7 +90,7 @@ export function createMultiplayer(options: {
 
     next.binaryType = 'arraybuffer'
     next.addEventListener('open', () => {
-      ignoreVideoState = connectedOnce
+      preserveVideoState = connectedOnce
       connectedOnce = true
       clearTimeout(reconnect)
       heartbeat = setInterval(() => send(encodeHeartbeat()), heartbeatInterval)
@@ -101,9 +101,14 @@ export function createMultiplayer(options: {
       sendVideoState()
       flush()
     })
-    next.addEventListener('close', () => {
+    next.addEventListener('close', event => {
       clearInterval(heartbeat)
       clearInterval(videoSync)
+
+      if (event.code === 1012 && event.reason === 'protocol') {
+        location.reload()
+        return
+      }
 
       if (!closed) {
         reconnect = setTimeout(() => {
@@ -183,12 +188,8 @@ export function createMultiplayer(options: {
     }
 
     if (type === VIDEO_STATE) {
-      if (ignoreVideoState) {
-        ignoreVideoState = false
-        return
-      }
-
-      options.onVideoState(decodeVideoState(view).entries)
+      options.onVideoState(decodeVideoState(view).entries, preserveVideoState)
+      preserveVideoState = false
       return
     }
 

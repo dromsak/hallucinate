@@ -108,6 +108,24 @@ const saveKey = 'club-state'
 const helpSeenKey = 'club-help-seen'
 const bloomScale = 0.5
 const chatLogMax = 15
+const chatPalette = [
+  '#ff4fd8',
+  '#00f5ff',
+  '#ffe45e',
+  '#7cff4f',
+  '#ff6b35',
+  '#9b7cff',
+  '#46ffb0',
+  '#ff4f6d',
+  '#4fa3ff',
+  '#f8ff4f',
+  '#ff8cff',
+  '#35ff6b',
+  '#ffb84f',
+  '#6bffea',
+  '#ff5ef1',
+  '#b7ff35',
+]
 const keys = new Set<string>()
 const occupiedSeats = new Set<string>()
 const remoteSeats = new Set<string>()
@@ -140,9 +158,7 @@ function addChatLogMessage(id: number, text: string) {
 }
 
 function chatUserColor(id: number) {
-  const hue = (id * 137.508) % 360
-
-  return `hsl(${hue} 100% 78%)`
+  return chatPalette[id % chatPalette.length]!
 }
 
 function cycleIdle(direction: number) {
@@ -453,7 +469,7 @@ multiplayer = createMultiplayer({
   onOnlineCount: count => {
     onlineCount.textContent = `${count} online`
   },
-  onVideoState: entries => djVideoUi.applyStates(entries),
+  onVideoState: (entries, preserveSameTrack) => djVideoUi.applyStates(entries, preserveSameTrack),
   videoState: () => djVideoUi.states(),
 })
 

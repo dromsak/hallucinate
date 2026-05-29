@@ -25,7 +25,7 @@ import {
   VIDEO_STATE,
 } from './src/protocol.ts'
 import { hairPalette, jewelPalette, skinPalette } from './src/character-data.ts'
-import { outsideBounds, roomBounds } from './src/scene-data.ts'
+import { outsideBounds, roomBounds, videoStartTimes, videoTracks } from './src/scene-data.ts'
 import { seatAt } from './src/scene.ts'
 import { extname, isAbsolute, join, relative, resolve } from 'node:path'
 
@@ -58,7 +58,7 @@ const maxClientStep = 1.2
 const maxHairIndex = 32
 const memoryAssetMaxSize = 2 * 1024 * 1024
 const memoryAssets = new Map<string, MemoryAsset>()
-let videoState: VideoStateEntry[] | undefined
+let videoState: VideoStateEntry[] | undefined = initialVideoState()
 let nextId = 1
 
 type MemoryAsset = {
@@ -130,9 +130,7 @@ const server = Bun.serve<SocketData>({
       clients.set(socket, client)
       addToRoom(client, 0)
       sendRoomState(client)
-      if (videoState) {
-        sendVideoState(client)
-      }
+      sendVideoState(client)
       broadcastOnline()
       broadcast(client.room, encodeSpawn(client.pose), client)
     },
@@ -681,6 +679,14 @@ function pickVideoState() {
   }
 
   videoState = synced[Math.floor(Math.random() * synced.length)]!.videoState!
+}
+
+function initialVideoState(): VideoStateEntry[] {
+  return [
+    { zone: 'inside', id: videoTracks.inside, time: videoStartTimes.inside },
+    { zone: 'outside', id: videoTracks.outside, time: videoStartTimes.outside },
+    { zone: 'tent', id: videoTracks.tent, time: videoStartTimes.tent },
+  ]
 }
 
 function validateVideoState(entries: VideoStateEntry[]) {

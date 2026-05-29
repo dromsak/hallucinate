@@ -97,9 +97,13 @@ export function createDjVideoUi(
         time: times[area],
       }))
     },
-    applyStates(states: Array<{ zone: VideoZone; id: string; time: number }>) {
+    applyStates(states: Array<{ zone: VideoZone; id: string; time: number }>, preserveSameTrack = false) {
       for (const state of states) {
         const sameTrack = trackIds[state.zone] === state.id
+
+        if (sameTrack && preserveSameTrack) {
+          continue
+        }
 
         trackIds[state.zone] = state.id
         times[state.zone] = state.time
@@ -110,7 +114,7 @@ export function createDjVideoUi(
             players[state.zone]!.seekTo(state.time, true)
           }
           else {
-            cueVideoFromTime(state.zone, players, pendingStarts, times, trackIndexes, trackIds)
+            loadVideoFromTime(state.zone, players, pendingStarts, times, trackIndexes, trackIds)
           }
         }
       }
@@ -284,6 +288,33 @@ function cueVideoFromTime(
   }
   else {
     players[area]!.cueVideoById({
+      videoId: trackIds[area],
+      startSeconds: times[area],
+    })
+  }
+}
+
+function loadVideoFromTime(
+  area: VideoZone,
+  players: Partial<Record<VideoZone, YouTubePlayer>>,
+  pendingStarts: Partial<Record<VideoZone, number>>,
+  times: Record<VideoZone, number>,
+  trackIndexes: Record<VideoZone, number>,
+  trackIds: Record<VideoZone, string>,
+) {
+  pendingStarts[area] = times[area]
+  const playlist = trackIds[area] === videoTracks[area] ? videoPlaylists[area] : undefined
+
+  if (playlist) {
+    players[area]!.loadPlaylist({
+      index: trackIndexes[area],
+      list: playlist,
+      listType: 'playlist',
+      startSeconds: times[area],
+    })
+  }
+  else {
+    players[area]!.loadVideoById({
       videoId: trackIds[area],
       startSeconds: times[area],
     })
