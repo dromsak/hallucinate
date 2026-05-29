@@ -84,6 +84,7 @@ const {
   chatLog,
   onlineCount,
   onlineIndicator,
+  supportLink,
   intro,
   introBar,
   introProgress,
@@ -142,6 +143,7 @@ const helpSeen = localStorage.getItem(helpSeenKey) === 'true'
 const cameraController = createCameraController(canvas, characterPosition)
 function syncOnlineIndicator() {
   onlineIndicator.dataset.hidden = String(helpUi.root.dataset.open === 'true')
+  supportLink.dataset.hidden = String(helpUi.root.dataset.open === 'true')
 }
 syncOnlineIndicator()
 function addChatLogMessage(id: number, text: string) {
